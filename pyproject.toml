@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "sales-parser"
+version = "0.1.0"
+description = ""
+authors = ["AlexeyTarasov77 <alexxey2707@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+requests = "^2.32.3"
+beautifulsoup4 = "^4.13.3"
+returns = "^0.24.0"
+pytz = "^2025.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
