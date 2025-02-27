@@ -40,7 +40,9 @@ class _ItemParser:
         return deal_until
 
     def _parse_price(self) -> ProductPricesWithDiscount:
-        price_regex = re.compile(r"(\d+[.,]\d+)?\s(\w+)")
+        price_regex = re.compile(
+            r"(?:(\d[\d\s.,]*)\s*([A-Z]{2,3})|([A-Z]{2,3})\s*(\d[\d\s.,]*))"
+        )
         maybe_price_tags = (
             Maybe.from_optional(
                 cast(Tag | None, self._item_tag.find("div", class_="row"))
@@ -49,9 +51,10 @@ class _ItemParser:
             .bind_optional(
                 lambda el: cast(Tag | None, el.find_next("div", class_="row"))
             )
-            .bind_optional(lambda row: (row.contents[0], row.contents[2]))
+            .bind_optional(lambda row: row.find_all("div", class_="col-xs-4 col-sm-3"))
         )
-        discount_container, price_container = maybe_price_tags.unwrap()
+        res = maybe_price_tags.unwrap()
+        discount_container, price_container = res[0], res[2]
         assert isinstance(price_container, Tag) and isinstance(discount_container, Tag)
         price_tag = price_container.find(
             "span", style="white-space: nowrap", string=price_regex
@@ -94,8 +97,8 @@ class _ItemParser:
 
 class XboxParser(AbstractParser):
     def parse(self) -> Sequence[ParsedItem]:
-        req = requests.get(self._url, {"Accept": "text/html"})
-        soup = BeautifulSoup(req.text, "html.parser")
+        resp = requests.get(self._url, {"Accept": "text/html"})
+        soup = BeautifulSoup(resp.text, "html.parser")
         maybe_products: Maybe[Sequence[ParsedItem]] = (
             Maybe.from_optional(soup.find("div", class_="content-wrapper"))
             .bind_optional(lambda el: cast(Tag, el).find("section", class_="content"))

@@ -17,7 +17,7 @@ class ParsedItem:
     default_price: Price
     discounted_price: Price
     image_url: str
-    deal_until: datetime | None
+    deal_until: datetime | None = None
 
 
 class AbstractParser(ABC):
