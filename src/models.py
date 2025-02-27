@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import httpx
 from collections.abc import Sequence
 from datetime import datetime
 from dataclasses import dataclass
@@ -21,9 +22,10 @@ class ParsedItem:
 
 
 class AbstractParser(ABC):
-    def __init__(self, url: str, limit: int | None = None):
+    def __init__(self, url: str, client: httpx.AsyncClient, limit: int | None = None):
         self._url = url
         self._limit = limit
+        self._client = client
 
     @abstractmethod
-    def parse(self) -> Sequence[ParsedItem]: ...
+    async def parse(self) -> Sequence[ParsedItem]: ...

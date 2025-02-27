@@ -1,18 +1,22 @@
 from datetime import datetime
+from types import EllipsisType
 from pytz import timezone
-from typing import Any, NamedTuple, cast
+from typing import Any, Final, NamedTuple, cast
 import re
-import requests
 from bs4 import BeautifulSoup, Tag
 from collections.abc import Sequence
 from models import AbstractParser, ParsedItem, Price
 from returns.maybe import Maybe
 
 
-class ProductPricesWithDiscount(NamedTuple):
+class _ProductPricesWithDiscount(NamedTuple):
     default_price: Price
     discounted_price: Price
     discount: int
+
+
+type _SkipType = EllipsisType
+skip: Final = ...
 
 
 class _ItemParser:
@@ -39,7 +43,7 @@ class _ItemParser:
             deal_until = tz.localize(dt)
         return deal_until
 
-    def _parse_price(self) -> ProductPricesWithDiscount:
+    def _parse_price(self) -> _ProductPricesWithDiscount | _SkipType:
         price_regex = re.compile(
             r"(?:(\d[\d\s.,]*)\s*([A-Z]{2,3})|([A-Z]{2,3})\s*(\d[\d\s.,]*))"
         )
@@ -69,35 +73,56 @@ class _ItemParser:
         )
         discount_regex = re.compile(r"(\d+)%")
         discount_tag = discount_container.find("span", string=discount_regex)
+        if discount_tag is None:
+            return skip
         assert isinstance(discount_tag, Tag) and discount_tag.string is not None
         discount_match = discount_regex.search(discount_tag.string)
         assert discount_match is not None
         discount = int(discount_match.group(1))
+        if discount >= 100:
+            return skip
         default_price_value = (discounted_price.value * 100) // (100 - discount)
         default_price = Price(value=default_price_value, currency_code=currency_code)
-        return ProductPricesWithDiscount(default_price, discounted_price, discount)
+        return _ProductPricesWithDiscount(default_price, discounted_price, discount)
 
-    def parse(self) -> ParsedItem:
+    def parse(self) -> ParsedItem | _SkipType:
         maybe_tag_a: Maybe[Any] = Maybe.from_optional(
             self._item_tag.find("div", class_="pull-left")
         ).bind_optional(lambda div: div.find("a"))
         tag_a = maybe_tag_a.unwrap()
         assert isinstance(tag_a, Tag)
         name = str(tag_a.get("title"))
+        prices = self._parse_price()
+        if prices is skip:
+            return skip
         photo_tag = tag_a.find("img")
         if not photo_tag or not isinstance(photo_tag, Tag):
             raise ValueError("Tag with photo_url not found")
         image_url = str(photo_tag.get("src"))
-        prices = self._parse_price()
         deal_until = self._parse_deal_until()
         return ParsedItem(
-            name=name, image_url=image_url, deal_until=deal_until, **prices._asdict()
+            name=name,
+            image_url=image_url,
+            deal_until=deal_until,
+            **cast(_ProductPricesWithDiscount, prices)._asdict(),
         )
 
 
 class XboxParser(AbstractParser):
-    def parse(self) -> Sequence[ParsedItem]:
-        resp = requests.get(self._url, {"Accept": "text/html"})
+    def _parse_items(self, tags) -> Sequence[ParsedItem]:
+        skipped_count = 0
+        res = []
+        for tag in tags:
+            parsed_item = _ItemParser(tag).parse()
+            if parsed_item is skip:
+                skipped_count += 1
+            else:
+                res.append(parsed_item)
+        print("XBOX RES", "parsed", len(res), "skipped", skipped_count)
+        return res
+
+    async def parse(self) -> Sequence[ParsedItem]:
+        resp = await self._client.get(self._url)
         soup = BeautifulSoup(resp.text, "html.parser")
         maybe_products: Maybe[Sequence[ParsedItem]] = (
             Maybe.from_optional(soup.find("div", class_="content-wrapper"))
@@ -107,10 +132,6 @@ class XboxParser(AbstractParser):
                     "div", class_="box-body comparison-table-entry", limit=self._limit
                 )
             )
-            .bind_optional(
-                lambda products: [
-                    _ItemParser(product_tag).parse() for product_tag in products
-                ]
-            )
+            .bind_optional(lambda products: self._parse_items(products))
         )
         return maybe_products.unwrap()
