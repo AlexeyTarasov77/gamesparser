@@ -47,11 +47,16 @@ class ItemParser:
     def parse(self, region: str) -> ParsedItem:
         name = self._data["name"]
         discounted_price = self._parse_price(self._data["price"]["discountedPrice"])
-        default_price = self._parse_price(self._data["price"]["basePrice"])
+        base_price = self._parse_price(self._data["price"]["basePrice"])
         discount = self._parse_discount(self._data["price"]["discountText"])
         image_url = self._find_cover_url()
         return ParsedItem(
-            name, discount, default_price, discounted_price, image_url or "", region
+            name,
+            discount,
+            base_price,
+            discounted_price,
+            image_url or "",
+            region,
         )
 
 
@@ -59,11 +64,11 @@ class PsnParser(AbstractParser):
     def __init__(self, url: str, client: httpx.AsyncClient, limit: int | None = None):
         super().__init__(url, client, limit)
         self._is_last_page = False
-        self.sem = asyncio.Semaphore(10)
+        self.sem = asyncio.Semaphore(5)
 
     async def _load_page(self, url: str) -> BeautifulSoup:
         async with self.sem:
-            resp = await self._client.get(url)
+            resp = await self._client.get(url, timeout=None)
         return BeautifulSoup(resp.text, "html.parser")
 
     async def _get_last_page_num_with_page_size(self) -> tuple[int, int]:
@@ -79,6 +84,7 @@ class PsnParser(AbstractParser):
         return math.ceil(page_info["totalCount"] / page_info["size"]), page_info["size"]
 
     async def _parse_page(self, page_num: int) -> Sequence[ParsedItem]:
+        print("parsing page", page_num)
         url = self._url + str(page_num)
         soup = await self._load_page(url)
         json_data_container = soup.find("script", id="__NEXT_DATA__")

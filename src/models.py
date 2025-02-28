@@ -15,10 +15,11 @@ class Price:
 class ParsedItem:
     name: str
     discount: int  # discount in percents (0-100)
-    default_price: Price
+    base_price: Price
     discounted_price: Price
     image_url: str
     region: str
+    with_gp: bool | None = None
     deal_until: datetime | None = None
 
 

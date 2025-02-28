@@ -1,5 +1,7 @@
 from collections.abc import Sequence
+from dataclasses import asdict
 import psycopg
+from psycopg import sql
 import httpx
 from itertools import chain
 import time
@@ -18,34 +20,30 @@ async def load_to_db(
     psn_items: Sequence[ParsedItem],
 ):
     conn = await psycopg.AsyncConnection.connect(dsn)
+    table_name_id = sql.Identifier(table_name)
 
-    def extract_fields_values(item: ParsedItem, category: str):
-        return (
-            item.name,
-            item.default_price.value,
-            item.default_price.currency_code,
-            item.discounted_price.value,
-            item.discounted_price.currency_code,
-            item.discount,
-            item.deal_until,
-            item.image_url,
-            item.region,
-            category,
-        )
+    def convert_item(item: ParsedItem, category: str):
+        item_dump = asdict(item)
+        item_dump["base_price"] = item.base_price.value
+        item_dump["base_price_currency"] = item.base_price.currency_code
+        item_dump["discounted_price"] = item.discounted_price.value
+        item_dump["discounted_price_currency"] = item.discounted_price.currency_code
+        item_dump["category"] = category
+        return item_dump
 
-    query = f"""INSERT INTO "{table_name}"(
+    query = sql.SQL("""INSERT INTO {}(
         name, base_price, base_price_currency, discounted_price,
-        discounted_price_currency, discount, deal_until, image_url, region, category)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+        discounted_price_currency, discount, deal_until, image_url, region, with_gp, category)
+        VALUES (%(name)s, %(base_price)s, %(base_price_currency)s,
+        %(discounted_price)s, %(discounted_price_currency)s, %(discount)s,
+        %(deal_until)s, %(image_url)s, %(region)s, %(with_gp)s, %(category)s)""").format(
+        table_name_id
+    )
     async with conn, conn.cursor() as cur:
-        await cur.execute(f"TRUNCATE TABLE {table_name}")
+        await cur.execute(sql.SQL("TRUNCATE TABLE {}").format(table_name_id))
         coros = [
-            cur.executemany(
-                query, [extract_fields_values(item, "XBOX") for item in xbox_items]
-            ),
-            cur.executemany(
-                query, [extract_fields_values(item, "PSN") for item in psn_items]
-            ),
+            cur.executemany(query, [convert_item(item, "XBOX") for item in xbox_items]),
+            cur.executemany(query, [convert_item(item, "PSN") for item in psn_items]),
         ]
         await asyncio.gather(*coros)
 
@@ -64,8 +62,6 @@ async def main():
     ), "Specify storage dsn and table_name to load data to. You can do it whether using cli flag(-s / -t) or set environment variable(DB_DSN / DB_TABLE_NAME)"
     psn_parse_regions = ("ru-ua", "en-tr")
     XBOX_SALES_URL = "https://www.xbox-now.com/en/deal-list"
-    # PSN_SALES_URL_UA = "https://store.playstation.com/ru-ua/category/3f772501-f6f8-49b7-abac-874a88ca4897/"
-    # PSN_SALES_URL_TR = "https://store.playstation.com/en-tr/category/3f772501-f6f8-49b7-abac-874a88ca4897/"
     limit: int | None = args.limit
     async with httpx.AsyncClient() as client:
         xbox_parser = XboxParser(XBOX_SALES_URL, client, limit)
