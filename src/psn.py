@@ -1,5 +1,4 @@
 import asyncio
-import random
 from collections.abc import Sequence
 import re
 import math
@@ -45,14 +44,14 @@ class ItemParser:
                 return el["url"]
         return None
 
-    def parse(self) -> ParsedItem:
+    def parse(self, region: str) -> ParsedItem:
         name = self._data["name"]
         discounted_price = self._parse_price(self._data["price"]["discountedPrice"])
         default_price = self._parse_price(self._data["price"]["basePrice"])
         discount = self._parse_discount(self._data["price"]["discountText"])
         image_url = self._find_cover_url()
         return ParsedItem(
-            name, discount, default_price, discounted_price, image_url or ""
+            name, discount, default_price, discounted_price, image_url or "", region
         )
 
 
@@ -88,7 +87,8 @@ class PsnParser(AbstractParser):
         items = []
         for key, value in data.items():
             if key.lower().startswith("product:"):
-                items.append(ItemParser(value).parse())
+                region = key.split(":")[-1].split("-")[1]
+                items.append(ItemParser(value).parse(region))
         return items
 
     async def parse(self) -> Sequence[ParsedItem]:

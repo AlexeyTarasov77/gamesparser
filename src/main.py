@@ -1,7 +1,6 @@
 import httpx
 from psn import PsnParser
 import asyncio
-import time
 import os
 from xbox import XboxParser
 import argparse
@@ -24,16 +23,17 @@ async def main():
         xbox_parser = XboxParser(XBOX_SALES_URL, client, limit)
         psn_ua_parser = PsnParser(PSN_SALES_URL_UA, client, limit)
         psn_tr_parser = PsnParser(PSN_SALES_URL_TR, client, limit)
-        # psn_items = list(psn_ua_parser.parse()) + list(psn_tr_parser.parse())
-        t1 = time.perf_counter()
-        res = await asyncio.gather(
-            *[parser.parse() for parser in (xbox_parser, psn_ua_parser, psn_tr_parser)]
-        )
-        print("Time elapsed", time.perf_counter() - t1)
-    total_parsed = 0
-    for sublist in res:
-        total_parsed += len(sublist)
-    print("total parsed", total_parsed)
+        res = await psn_tr_parser.parse()
+        print(res[0])
+    #     t1 = time.perf_counter()
+    #     res = await asyncio.gather(
+    #         *[parser.parse() for parser in (xbox_parser, psn_ua_parser, psn_tr_parser)]
+    #     )
+    #     print("Time elapsed", time.perf_counter() - t1)
+    # total_parsed = 0
+    # for sublist in res:
+    #     total_parsed += len(sublist)
+    # print("total parsed", total_parsed)
 
 
 if __name__ == "__main__":

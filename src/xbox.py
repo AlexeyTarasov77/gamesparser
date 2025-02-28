@@ -9,10 +9,11 @@ from models import AbstractParser, ParsedItem, Price
 from returns.maybe import Maybe
 
 
-class _ProductPricesWithDiscount(NamedTuple):
+class _ProductPartialData(NamedTuple):
     default_price: Price
     discounted_price: Price
     discount: int
+    region: str
 
 
 type _SkipType = EllipsisType
@@ -43,7 +44,7 @@ class _ItemParser:
             deal_until = tz.localize(dt)
         return deal_until
 
-    def _parse_price(self) -> _ProductPricesWithDiscount | _SkipType:
+    def _parse_price(self) -> _ProductPartialData | _SkipType:
         price_regex = re.compile(
             r"(?:(\d[\d\s.,]*)\s*([A-Z]{2,3})|([A-Z]{2,3})\s*(\d[\d\s.,]*))"
         )
@@ -60,6 +61,9 @@ class _ItemParser:
         res = maybe_price_tags.unwrap()
         discount_container, price_container = res[0], res[2]
         assert isinstance(price_container, Tag) and isinstance(discount_container, Tag)
+        region_tag = price_container.find("img", class_="flag")
+        assert isinstance(region_tag, Tag)
+        region = str(region_tag["title"])
         price_tag = price_container.find(
             "span", style="white-space: nowrap", string=price_regex
         )
@@ -83,7 +87,7 @@ class _ItemParser:
             return skip
         default_price_value = (discounted_price.value * 100) // (100 - discount)
         default_price = Price(value=default_price_value, currency_code=currency_code)
-        return _ProductPricesWithDiscount(default_price, discounted_price, discount)
+        return _ProductPartialData(default_price, discounted_price, discount, region)
 
     def parse(self) -> ParsedItem | _SkipType:
         maybe_tag_a: Maybe[Any] = Maybe.from_optional(
@@ -104,7 +108,7 @@ class _ItemParser:
             name=name,
             image_url=image_url,
             deal_until=deal_until,
-            **cast(_ProductPricesWithDiscount, prices)._asdict(),
+            **cast(_ProductPartialData, prices)._asdict(),
         )
 
 

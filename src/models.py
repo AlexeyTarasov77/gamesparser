@@ -18,6 +18,7 @@ class ParsedItem:
     default_price: Price
     discounted_price: Price
     image_url: str
+    region: str
     deal_until: datetime | None = None
 
 
