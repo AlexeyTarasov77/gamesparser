@@ -104,7 +104,7 @@ class _ItemParser:
         discounted_price, region = self._parse_discounted_price_and_region(
             price_container
         )
-        base_price_value = (discounted_price.value * 100) // (100 - discount)
+        base_price_value = round((discounted_price.value * 100) / (100 - discount), 2)
         base_price = Price(
             value=base_price_value, currency_code=discounted_price.currency_code
         )
