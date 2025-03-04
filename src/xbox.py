@@ -1,7 +1,7 @@
 from datetime import datetime
-from types import EllipsisType
+import httpx
 from pytz import timezone
-from typing import Any, Final, cast
+from typing import Any, cast
 import re
 from bs4 import BeautifulSoup, Tag
 from collections.abc import Sequence
@@ -9,13 +9,16 @@ from models import AbstractParser, ParsedItem, Price
 from returns.maybe import Maybe
 
 
-type _SkipType = EllipsisType
-skip: Final = ...
+class _Skip: ...
+
+
+skip = _Skip()
 
 
 class _ItemParser:
-    def __init__(self, item_tag):
+    def __init__(self, item_tag, extra_regions: tuple[str, ...]):
         self._item_tag = item_tag
+        self._extra_regions = [region.lower() for region in extra_regions]
 
     def _parse_deal_until(self) -> datetime | None:
         deal_until_span = self._item_tag.find("span", string=re.compile("^Deal until:"))
@@ -37,25 +40,26 @@ class _ItemParser:
             deal_until = tz.localize(dt)
         return deal_until
 
-    def _parse_discounted_price_and_region(self, price_container) -> tuple[Price, str]:
-        price_regex = re.compile(
-            r"(?:(\d[\d\s.,]*)\s*([A-Z]{2,3})|([A-Z]{2,3})\s*(\d[\d\s.,]*))"
-        )
-        region_tag = price_container.find("img", class_="flag")
-        assert isinstance(region_tag, Tag)
-        region = str(region_tag["title"])
-        price_tag = price_container.find(
-            "span", style="white-space: nowrap", string=price_regex
-        )
-        assert isinstance(price_tag, Tag) and price_tag.string is not None
-        price_match = price_regex.search(price_tag.string)
-        assert price_match is not None
-        currency_code = price_match.group(2).strip()
-        discounted_price = Price(
-            value=float(price_match.group(1).replace(",", ".")),
-            currency_code=currency_code,
-        )
-        return discounted_price, region
+    def _parse_prices_with_regions(self, containers) -> dict[str, Price]:
+        price_mapping = {}
+        price_regex = re.compile(r"(\d+(?:\.\d+)?)\s([A-Z]{2,3})")
+        for tag in containers:
+            region_tag = tag.find("img", class_="flag")
+            assert isinstance(region_tag, Tag)
+            region = str(region_tag["title"])
+            price_tag = tag.find(
+                "span", style="white-space: nowrap", string=price_regex
+            )
+            assert isinstance(price_tag, Tag) and price_tag.string is not None
+            price_match = price_regex.search(price_tag.string)
+            assert price_match is not None
+            currency_code = price_match.group(2).strip()
+            discounted_price = Price(
+                value=float(price_match.group(1)),
+                currency_code=currency_code,
+            )
+            price_mapping[region] = discounted_price
+        return price_mapping
 
     def _parse_discount(self, discount_container) -> tuple[int, bool] | None:
         discount_regex = re.compile(r"(\d+)%(\s\(\w+\))?")
@@ -82,7 +86,14 @@ class _ItemParser:
         image_url = str(photo_tag.get("src"))
         return name, image_url
 
-    def parse(self) -> ParsedItem | _SkipType:
+    def _calc_base_price(self, discounted_price: Price, discount: int) -> Price:
+        base_price_value = round((discounted_price.value * 100) / (100 - discount), 2)
+        base_price = Price(
+            value=base_price_value, currency_code=discounted_price.currency_code
+        )
+        return base_price
+
+    def parse(self) -> Sequence[ParsedItem] | _Skip:
         maybe_row_tags = (
             Maybe.from_optional(
                 cast(Tag | None, self._item_tag.find("div", class_="row"))
@@ -94,44 +105,58 @@ class _ItemParser:
             .bind_optional(lambda row: row.find_all("div", class_="col-xs-4 col-sm-3"))
         )
         res = maybe_row_tags.unwrap()
-        discount_container, price_container = res[0], res[2]
+        discount_container, price_containers = (
+            res[0],
+            res[1:],
+        )
         discount_info = self._parse_discount(discount_container)
         if discount_info is None:
             return skip
         discount, with_gp = discount_info
         if discount >= 100:
             return skip
-        discounted_price, region = self._parse_discounted_price_and_region(
-            price_container
-        )
-        base_price_value = round((discounted_price.value * 100) / (100 - discount), 2)
-        base_price = Price(
-            value=base_price_value, currency_code=discounted_price.currency_code
-        )
         name, image_url = self._parse_name_and_image()
         deal_until = self._parse_deal_until()
-        return ParsedItem(
-            name=name,
-            discount=discount,
-            with_gp=with_gp,
-            base_price=base_price,
-            discounted_price=discounted_price,
-            image_url=image_url,
-            region=region,
-            deal_until=deal_until,
-        )
+        items: list[ParsedItem] = []
+        price_mapping = self._parse_prices_with_regions(price_containers)
+        for region, discounted_price in price_mapping.items():
+            if region.lower() not in self._extra_regions:
+                continue
+            items.append(
+                ParsedItem(
+                    name=name,
+                    discount=discount,
+                    with_gp=with_gp,
+                    base_price=self._calc_base_price(discounted_price, discount),
+                    discounted_price=discounted_price,
+                    image_url=image_url,
+                    region=region,
+                    deal_until=deal_until,
+                )
+            )
+        return items
 
 
 class XboxParser(AbstractParser):
+    def __init__(
+        self,
+        regions: tuple[str, ...],
+        url: str,
+        client: httpx.AsyncClient,
+        limit: int | None = None,
+    ):
+        super().__init__(url, client, limit)
+        self._regions = regions
+
     def _parse_items(self, tags) -> Sequence[ParsedItem]:
         skipped_count = 0
         res = []
         for tag in tags:
-            parsed_item = _ItemParser(tag).parse()
-            if parsed_item is skip:
+            parsed_item = _ItemParser(tag, self._regions).parse()
+            if isinstance(parsed_item, _Skip):
                 skipped_count += 1
             else:
-                res.append(parsed_item)
+                res.extend(parsed_item)
         print("XBOX RES", "parsed", len(res), "skipped", skipped_count)
         return res
 

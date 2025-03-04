@@ -5,6 +5,12 @@ from psycopg import sql
 import httpx
 from itertools import chain
 import time
+from constants import (
+    PSN_PARSE_REGIONS,
+    PSN_SALES_URL,
+    XBOX_PARSE_REGIONS,
+    XBOX_SALES_URL,
+)
 from models import ParsedItem
 from psn import PsnParser
 import asyncio
@@ -48,30 +54,32 @@ async def load_to_db(
         await asyncio.gather(*coros)
 
 
-async def main():
+def parse_cli():
     cli_parser = argparse.ArgumentParser()
     cli_parser.add_argument("-l", "--limit", type=int)
     cli_parser.add_argument("-s", "--db-dsn")
     cli_parser.add_argument("-t", "--table-name")
     args = cli_parser.parse_args()
+    return args
+
+
+async def main():
+    args = parse_cli()
     db_dsn: str | None = args.db_dsn or os.getenv("DB_DSN")
     table_name: str | None = args.table_name or os.getenv("DB_TABLE_NAME")
-
     assert (
         db_dsn and table_name
     ), "Specify storage dsn and table_name to load data to. You can do it whether using cli flag(-s / -t) or set environment variable(DB_DSN / DB_TABLE_NAME)"
-    psn_parse_regions = ("ru-ua", "en-tr")
-    XBOX_SALES_URL = "https://www.xbox-now.com/en/deal-list"
     limit: int | None = args.limit
     async with httpx.AsyncClient() as client:
-        xbox_parser = XboxParser(XBOX_SALES_URL, client, limit)
+        xbox_parser = XboxParser(XBOX_PARSE_REGIONS, XBOX_SALES_URL, client, limit)
         psn_parsers = [
             PsnParser(
-                f"https://store.playstation.com/{region.lower()}/category/3f772501-f6f8-49b7-abac-874a88ca4897/",
+                PSN_SALES_URL.format(region=region.lower()),
                 client,
                 limit,
             )
-            for region in psn_parse_regions
+            for region in PSN_PARSE_REGIONS
         ]
         t1 = time.perf_counter()
         res = await asyncio.gather(
@@ -82,8 +90,8 @@ async def main():
     for sublist in res:
         total_parsed += len(sublist)
     print("total parsed", total_parsed)
-    xbox_items = res[0]
-    psn_items = list(chain.from_iterable(res[1:]))
+    xbox_items, *psn_item_lists = res
+    psn_items = list(chain.from_iterable(psn_item_lists))
     await load_to_db(db_dsn, table_name, xbox_items, psn_items)
 
 

@@ -84,7 +84,6 @@ class PsnParser(AbstractParser):
         return math.ceil(page_info["totalCount"] / page_info["size"]), page_info["size"]
 
     async def _parse_page(self, page_num: int) -> Sequence[ParsedItem]:
-        print("parsing page", page_num)
         url = self._url + str(page_num)
         soup = await self._load_page(url)
         json_data_container = soup.find("script", id="__NEXT_DATA__")
