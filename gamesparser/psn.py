@@ -63,13 +63,11 @@ class PsnParser(AbstractParser):
     def __init__(
         self,
         parse_regions: tuple[str, ...],
-        url: str,
         client: httpx.AsyncClient,
         limit: int | None = None,
     ):
-        if not url.endswith("/"):
-            url += "/"
-        super().__init__(url, client, limit)
+        super().__init__(client, limit)
+        self._url = "https://store.playstation.com/{region}/category/3f772501-f6f8-49b7-abac-874a88ca4897/"
         lang_to_region_mapping = {"tr": "en", "ua": "ru"}
         self._regions = [
             f"{lang_to_region_mapping[region]}-{region}" for region in parse_regions
@@ -121,6 +119,5 @@ class PsnParser(AbstractParser):
         await asyncio.gather(*coros)
 
     async def parse(self) -> Sequence[ParsedItem]:
-        coros = [self._parse_all_for_region(region) for region in self._regions]
-        await asyncio.gather(*coros)
+        [await self._parse_all_for_region(region) for region in self._regions]
         return list(self._items_mapping.values())[: self._limit]

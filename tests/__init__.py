@@ -1,4 +1,4 @@
 import sys
 from pathlib import Path
 
-sys.path.append((Path() / "src").absolute().as_posix())
+sys.path.append((Path() / "gamesparser").absolute().as_posix())

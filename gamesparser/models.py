@@ -28,8 +28,7 @@ class ParsedItem:
 
 
 class AbstractParser(ABC):
-    def __init__(self, url: str, client: httpx.AsyncClient, limit: int | None = None):
-        self._url = url
+    def __init__(self, client: httpx.AsyncClient, limit: int | None = None):
         self._limit = limit
         self._client = client
 

@@ -18,7 +18,7 @@ skip = _Skip()
 class _ItemParser:
     def __init__(self, item_tag, extra_regions: tuple[str, ...]):
         self._item_tag = item_tag
-        self._extra_regions = [region.lower() for region in extra_regions]
+        self._extra_regions = set(region.lower() for region in extra_regions)
 
     def _parse_deal_until(self) -> datetime | None:
         deal_until_span = self._item_tag.find("span", string=re.compile("^Deal until:"))
@@ -136,13 +136,13 @@ class _ItemParser:
 class XboxParser(AbstractParser):
     def __init__(
         self,
-        regions: tuple[str, ...],
-        url: str,
+        parse_regions: tuple[str, ...],
         client: httpx.AsyncClient,
         limit: int | None = None,
     ):
-        super().__init__(url, client, limit)
-        self._regions = regions
+        super().__init__(client, limit)
+        self._url = "https://www.xbox-now.com/en/deal-list"
+        self._regions = parse_regions
 
     def _parse_items(self, tags) -> Sequence[ParsedItem]:
         skipped_count = 0
