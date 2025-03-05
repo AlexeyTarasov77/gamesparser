@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
+from typing import Any
 import httpx
 from collections.abc import Sequence
 from datetime import datetime
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 
 @dataclass
@@ -25,6 +26,12 @@ class ParsedItem:
     image_url: str
     with_gp: bool | None = None
     deal_until: datetime | None = None
+
+    def as_json_serializable(self) -> dict[str, Any]:
+        data = asdict(self)
+        if self.deal_until:
+            data["deal_until"] = str(self.deal_until)
+        return data
 
 
 class AbstractParser(ABC):
