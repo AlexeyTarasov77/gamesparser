@@ -73,26 +73,19 @@ async def main():
     limit: int | None = args.limit
     async with httpx.AsyncClient() as client:
         xbox_parser = XboxParser(XBOX_PARSE_REGIONS, XBOX_SALES_URL, client, limit)
-        psn_parsers = [
-            PsnParser(
-                PSN_SALES_URL.format(region=region.lower()),
-                client,
-                limit,
-            )
-            for region in PSN_PARSE_REGIONS
-        ]
+        psn_parser = PsnParser(PSN_PARSE_REGIONS, PSN_SALES_URL, client, limit)
         t1 = time.perf_counter()
-        res = await asyncio.gather(
-            *[parser.parse() for parser in (xbox_parser, *psn_parsers)]
-        )
+        res = await psn_parser.parse()
+        print("PSN PARSED", len(res))
+
+        # res = await asyncio.gather(xbox_parser.parse(), psn_parser.parse())
         print("Time elapsed", time.perf_counter() - t1)
-    total_parsed = 0
-    for sublist in res:
-        total_parsed += len(sublist)
-    print("total parsed", total_parsed)
-    xbox_items, *psn_item_lists = res
-    psn_items = list(chain.from_iterable(psn_item_lists))
-    await load_to_db(db_dsn, table_name, xbox_items, psn_items)
+    # total_parsed = 0
+    # for sublist in res:
+    #     total_parsed += len(sublist)
+    # print("total parsed", total_parsed)
+    # xbox_items, psn_items = res
+    # await load_to_db(db_dsn, table_name, xbox_items, psn_items)
 
 
 if __name__ == "__main__":

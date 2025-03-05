@@ -12,13 +12,17 @@ class Price:
 
 
 @dataclass
+class ParsedPriceByRegion:
+    base_price: Price
+    discounted_price: Price
+
+
+@dataclass
 class ParsedItem:
     name: str
     discount: int  # discount in percents (0-100)
-    base_price: Price
-    discounted_price: Price
+    prices: dict[str, ParsedPriceByRegion]
     image_url: str
-    region: str
     with_gp: bool | None = None
     deal_until: datetime | None = None
 

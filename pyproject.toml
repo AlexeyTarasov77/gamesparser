@@ -14,9 +14,11 @@ returns = "^0.24.0"
 pytz = "^2025.1"
 httpx = "^0.28.1"
 psycopg = "^3.2.5"
+
+
+[tool.poetry.group.dev.dependencies]
 pytest = "^8.3.5"
 pytest-asyncio = "^0.25.3"
-
 
 [build-system]
 requires = ["poetry-core"]
