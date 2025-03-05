@@ -6,7 +6,7 @@ import json
 
 from bs4 import BeautifulSoup, Tag
 import httpx
-from models import AbstractParser, ParsedItem, ParsedPriceByRegion, Price
+from .models import AbstractParser, ParsedItem, ParsedPriceByRegion, Price
 
 
 class ItemParser:

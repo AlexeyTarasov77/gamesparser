@@ -2,12 +2,6 @@ from collections.abc import Sequence
 import pytest
 import httpx
 
-from gamesparser.constants import (
-    PSN_PARSE_REGIONS,
-    PSN_SALES_URL,
-    XBOX_PARSE_REGIONS,
-    XBOX_SALES_URL,
-)
 from gamesparser.models import AbstractParser
 from gamesparser.psn import PsnParser
 from gamesparser.xbox import XboxParser
@@ -34,23 +28,23 @@ async def _check_parsed_unique_with_regions(
 
 
 @pytest.mark.parametrize(
-    "allowed_regions", [XBOX_PARSE_REGIONS, ("us", "eg"), ("tr", "ar")]
+    "allowed_regions", [("us", "tr", "ar"), ("us", "eg"), ("tr", "ar")]
 )
 @pytest.mark.asyncio
-async def test_xbox(httpx_client, allowed_regions: tuple[str, ...]):
-    parser = XboxParser(allowed_regions, XBOX_SALES_URL, httpx_client)
+async def test_xbox(httpx_client: httpx.AsyncClient, allowed_regions: tuple[str, ...]):
+    parser = XboxParser(allowed_regions, httpx_client)
     await _check_parsed_unique_with_regions(parser, allowed_regions)
 
 
 @pytest.mark.parametrize(
     "allowed_regions",
     [
-        PSN_PARSE_REGIONS,
+        ("ua", "tr"),
         ("tr",),
         ("ua",),
     ],
 )
 @pytest.mark.asyncio
-async def test_psn(httpx_client, allowed_regions: tuple[str, ...]):
-    parser = PsnParser(allowed_regions, PSN_SALES_URL, httpx_client, 50)
+async def test_psn(httpx_client: httpx.AsyncClient, allowed_regions: tuple[str, ...]):
+    parser = PsnParser(allowed_regions, httpx_client, 50)
     await _check_parsed_unique_with_regions(parser, allowed_regions)

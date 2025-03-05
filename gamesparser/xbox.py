@@ -5,7 +5,7 @@ from typing import Any, cast
 import re
 from bs4 import BeautifulSoup, Tag
 from collections.abc import Sequence
-from models import AbstractParser, ParsedItem, ParsedPriceByRegion, Price
+from .models import AbstractParser, ParsedItem, ParsedPriceByRegion, Price
 from returns.maybe import Maybe
 
 
