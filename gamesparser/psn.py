@@ -62,16 +62,17 @@ class ItemParser:
 class PsnParser(AbstractParser):
     def __init__(
         self,
-        parse_regions: tuple[str, ...],
+        parse_regions: Sequence[str],
         client: httpx.AsyncClient,
         limit: int | None = None,
     ):
         super().__init__(client, limit)
         self._url = "https://store.playstation.com/{region}/category/3f772501-f6f8-49b7-abac-874a88ca4897/"
         lang_to_region_mapping = {"tr": "en", "ua": "ru"}
-        self._regions = [
-            f"{lang_to_region_mapping[region]}-{region}" for region in parse_regions
-        ]
+        self._regions = {
+            f"{lang_to_region_mapping.get( region, "en" )}-{region}"
+            for region in parse_regions
+        }
         self._sem = asyncio.Semaphore(5)
         self._items_mapping: dict[str, ParsedItem] = {}
         self._curr_url = self._url
