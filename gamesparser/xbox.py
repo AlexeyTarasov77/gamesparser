@@ -48,8 +48,8 @@ class _ItemParser:
         for tag in containers:
             region_tag = tag.find("img", class_="flag")
             assert isinstance(region_tag, Tag)
-            region = str(region_tag["title"])
-            if region not in self._extra_regions:
+            region = str(region_tag["title"]).lower()
+            if region != "us" and region not in self._extra_regions:
                 continue
             price_tag = tag.find(
                 "span", style="white-space: nowrap", string=price_regex
@@ -64,6 +64,8 @@ class _ItemParser:
             )
             base_price = self._calc_base_price(discounted_price, discount)
             price_mapping[region] = ParsedPriceByRegion(base_price, discounted_price)
+        if not price_mapping:
+            raise ValueError("Failed to parse any prices for item")
         return price_mapping
 
     def _parse_discount(self, discount_container) -> tuple[int, bool] | None:
