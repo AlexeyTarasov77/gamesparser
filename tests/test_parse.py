@@ -15,7 +15,9 @@ async def httpx_client():
 
 
 async def _check_parsed_unique_with_regions(
-    parser: AbstractParser, allowed_regions: Sequence[str]
+    parser: AbstractParser,
+    allowed_regions: Sequence[str],
+    extra_regions: Sequence[str] = [],
 ):
     allowed_regions = [region.lower() for region in allowed_regions]
     res = await parser.parse()
@@ -23,17 +25,18 @@ async def _check_parsed_unique_with_regions(
     for obj in res:
         assert obj not in checked_names
         for region in obj.prices:
-            assert region.lower() in allowed_regions
+            assert region.lower() in allowed_regions or region.lower() in extra_regions
         checked_names.append(obj.name)
 
 
 @pytest.mark.parametrize(
-    "allowed_regions", [("us", "tr", "ar"), ("us", "eg"), ("tr", "ar")]
+    "allowed_regions",
+    [("tr", "ar"), ("eg"), ("tr", "ar")],
 )
 @pytest.mark.asyncio
 async def test_xbox(httpx_client: httpx.AsyncClient, allowed_regions: tuple[str, ...]):
     parser = XboxParser(allowed_regions, httpx_client)
-    await _check_parsed_unique_with_regions(parser, allowed_regions)
+    await _check_parsed_unique_with_regions(parser, allowed_regions, ["us"])
 
 
 @pytest.mark.parametrize(

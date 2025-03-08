@@ -9,3 +9,6 @@ docker/run:
 test:
 	poetry run pytest
 
+upload:
+	twine upload dist/*
+
