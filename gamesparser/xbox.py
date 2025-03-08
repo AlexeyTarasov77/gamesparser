@@ -1,5 +1,4 @@
 from datetime import datetime
-import httpx
 from pytz import timezone
 from typing import Any, cast
 import re
@@ -7,12 +6,6 @@ from bs4 import BeautifulSoup, Tag
 from collections.abc import Sequence
 from .models import AbstractParser, ParsedItem, ParsedPriceByRegion, Price
 from returns.maybe import Maybe
-
-
-class _Skip: ...
-
-
-skip = _Skip()
 
 
 class _ItemParser:
@@ -64,12 +57,11 @@ class _ItemParser:
             )
             base_price = self._calc_base_price(discounted_price, discount)
             price_mapping[region] = ParsedPriceByRegion(base_price, discounted_price)
-        if not price_mapping:
-            raise ValueError("Failed to parse any prices for item")
+        assert price_mapping, "Failed to parse any prices for item"
         return price_mapping
 
     def _parse_discount(self, discount_container) -> tuple[int, bool] | None:
-        discount_regex = re.compile(r"(\d+)%(\s\(\w+\))?")
+        discount_regex = re.compile(r"^(\d+)%(\s\(\w+\))?$")
         discount_tag = discount_container.find("span", string=discount_regex)
         if discount_tag is None:
             return None
@@ -100,7 +92,7 @@ class _ItemParser:
         )
         return base_price
 
-    def parse(self) -> ParsedItem | _Skip:
+    def parse(self) -> ParsedItem:
         maybe_row_tags = (
             Maybe.from_optional(
                 cast(Tag | None, self._item_tag.find("div", class_="row"))
@@ -117,11 +109,9 @@ class _ItemParser:
             res[1:],
         )
         discount_info = self._parse_discount(discount_container)
-        if discount_info is None:
-            return skip
+        assert discount_info is not None
         discount, with_gp = discount_info
-        if discount >= 100:
-            return skip
+        assert discount < 100
         name, image_url = self._parse_name_and_image()
         deal_until = self._parse_deal_until()
         price_mapping = self._parse_price_mapping(price_containers, discount)
@@ -136,22 +126,15 @@ class _ItemParser:
 
 
 class XboxParser(AbstractParser):
-    def __init__(
-        self,
-        parse_regions: Sequence[str],
-        client: httpx.AsyncClient,
-        limit: int | None = None,
-    ):
-        super().__init__(client, limit)
-        self._url = "https://www.xbox-now.com/en/deal-list"
-        self._regions = set(region.lower() for region in parse_regions)
+    _url = "https://www.xbox-now.com/en/deal-list"
 
     def _parse_items(self, tags) -> Sequence[ParsedItem]:
         skipped_count = 0
         res = []
         for tag in tags:
-            parsed_item = _ItemParser(tag, self._regions).parse()
-            if isinstance(parsed_item, _Skip):
+            try:
+                parsed_item = _ItemParser(tag, self._regions).parse()
+            except AssertionError:
                 skipped_count += 1
             else:
                 res.append(parsed_item)

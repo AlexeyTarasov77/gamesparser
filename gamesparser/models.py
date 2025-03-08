@@ -35,9 +35,17 @@ class ParsedItem:
 
 
 class AbstractParser(ABC):
-    def __init__(self, client: httpx.AsyncClient, limit: int | None = None):
+    def __init__(
+        self,
+        parse_regions: Sequence[str],
+        client: httpx.AsyncClient,
+        limit: int | None = None,
+    ):
         self._limit = limit
         self._client = client
+        if not parse_regions:
+            raise ValueError("parse_regions can't be empty, specify at least 1 region")
+        self._regions = set(region.lower() for region in parse_regions)
 
     @abstractmethod
     async def parse(self) -> Sequence[ParsedItem]: ...
