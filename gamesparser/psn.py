@@ -32,7 +32,10 @@ class ItemParser:
             .replace(" ", "")
             .replace("\xa0", "")
         )
-        return Price(value=float(normalized_value), currency_code=currency_code.strip())
+        curr = currency_code.strip()
+        if curr == "TL":
+            curr = "TRY"  # change abbreviated to official currency code for turkish
+        return Price(value=float(normalized_value), currency_code=curr)
 
     def _parse_discount(self, s: str) -> int:
         normalized = s.replace("%", "")
