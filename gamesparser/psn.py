@@ -10,7 +10,7 @@ from .models import AbstractParser, ParsedItem, ParsedPriceByRegion, Price
 
 
 class ItemParser:
-    def __init__(self, data):
+    def __init__(self, data: dict):
         self._data = data
 
     def _parse_price(self, s: str) -> Price:
@@ -37,7 +37,9 @@ class ItemParser:
             curr = "TRY"  # change abbreviated to official currency code for turkish
         return Price(value=float(normalized_value), currency_code=curr)
 
-    def _parse_discount(self, s: str) -> int:
+    def _parse_discount(self, s: str | None) -> int:
+        if s is None:
+            return 0
         normalized = s.replace("%", "")
         return abs(int(normalized))
 
@@ -70,6 +72,7 @@ class PsnParser(AbstractParser):
         parse_regions: Sequence[str],
         client: httpx.AsyncClient,
         limit: int | None = None,
+        max_concurrent_req: int = 5,
     ):
         super().__init__(parse_regions, client, limit)
         lang_to_region_mapping = {"tr": "en", "ua": "ru"}
@@ -77,7 +80,7 @@ class PsnParser(AbstractParser):
             f"{lang_to_region_mapping.get( region, "en" )}-{region}"
             for region in parse_regions
         }
-        self._sem = asyncio.Semaphore(5)
+        self._sem = asyncio.Semaphore(max_concurrent_req)
         self._items_mapping: dict[str, ParsedItem] = {}
         self._curr_url = self._url
 
@@ -89,7 +92,9 @@ class PsnParser(AbstractParser):
     async def _get_last_page_num_with_page_size(self) -> tuple[int, int]:
         soup = await self._load_page(self._curr_url)
         json_data_container = soup.find("script", id="__NEXT_DATA__")
-        assert isinstance(json_data_container, Tag) and json_data_container.string
+        assert (
+            isinstance(json_data_container, Tag) and json_data_container.string
+        ), "Rate limit exceed! Please wait some time and try again later"
         data = json.loads(json_data_container.string)["props"]["apolloState"]
         page_info = None
         for key, value in data.items():
