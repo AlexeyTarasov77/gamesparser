@@ -65,6 +65,9 @@ class ItemParser:
 
 
 class PsnParser(AbstractParser):
+    """Parses sales from psn official website. CAUTION: there might be products which looks absolutely the same but have different discount and prices.
+    That's due to the fact that on psn price depends on product platform (ps4, ps5, etc). Such products aren't handled in parser."""
+
     _url = "https://store.playstation.com/{region}/category/3f772501-f6f8-49b7-abac-874a88ca4897/"
 
     def __init__(

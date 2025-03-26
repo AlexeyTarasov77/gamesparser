@@ -9,9 +9,9 @@ from returns.maybe import Maybe
 
 
 class _ItemParser:
-    def __init__(self, item_tag, extra_regions: Sequence[str] | set[str]):
+    def __init__(self, item_tag, parse_regions: Sequence[str] | set[str]):
         self._item_tag = item_tag
-        self._extra_regions = extra_regions
+        self._parse_regions = parse_regions
 
     def _parse_deal_until(self) -> datetime | None:
         deal_until_span = self._item_tag.find("span", string=re.compile("^Deal until:"))
@@ -42,7 +42,7 @@ class _ItemParser:
             region_tag = tag.find("img", class_="flag")
             assert isinstance(region_tag, Tag)
             region = str(region_tag["title"]).lower()
-            if region != "us" and region not in self._extra_regions:
+            if region not in self._parse_regions:
                 continue
             price_tag = tag.find(
                 "span", style="white-space: nowrap", string=price_regex
