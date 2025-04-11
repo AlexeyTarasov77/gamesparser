@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Sequence
+import logging
 import re
 import math
 import json
@@ -20,12 +21,12 @@ class ItemParser:
         price_match = price_regex.search(s)
         assert price_match is not None
         # may be 2 different variations of price form on page
+        value, currency_code = None, None
         if price_match.group(1) is not None:
             value, currency_code = price_match.group(1, 2)
         elif price_match.group(3) is not None:
             value, currency_code = price_match.group(4, 3)
-        else:
-            raise ValueError("Unable to parse price")
+        assert value is not None and currency_code is not None, "Unable to parse price"
         normalized_value = (
             value.replace(".", "")
             .replace(",", ".")
@@ -76,6 +77,7 @@ class PsnParser(AbstractParser):
         client: httpx.AsyncClient,
         limit: int | None = None,
         max_concurrent_req: int = 5,
+        logger: logging.Logger | None = None,
     ):
         super().__init__(parse_regions, client, limit)
         lang_to_region_mapping = {"tr": "en", "ua": "ru"}
@@ -107,27 +109,38 @@ class PsnParser(AbstractParser):
         return math.ceil(page_info["totalCount"] / page_info["size"]), page_info["size"]
 
     async def _parse_single_page(self, page_num: int):
+        self._logger.info("Parsing page %d", page_num)
         url = self._curr_url + str(page_num)
         soup = await self._load_page(url)
         json_data_container = soup.find("script", id="__NEXT_DATA__")
         assert isinstance(json_data_container, Tag) and json_data_container.string
         data = json.loads(json_data_container.string)["props"]["apolloState"]
+        skipped_count = 0
         for key, value in data.items():
             if not key.lower().startswith("product:"):
                 continue
             _, id, lang_with_region = key.split(":")
             region = lang_with_region.split("-")[1]
-            parsed_item = ItemParser(value).parse(region)
+            try:
+                parsed_item = ItemParser(value).parse(region)
+            except AssertionError as e:
+                self._logger.info(
+                    "Failed to parse item: %s. KEY: %s, VALUE: %s", e, key, value
+                )
+                skipped_count += 1
+                continue
             if id in self._items_mapping:
                 self._items_mapping[id].prices.update(parsed_item.prices)
             else:
                 self._items_mapping[id] = parsed_item
+        self._logger.info("Page %d parsed. %d items skipped", page_num, skipped_count)
 
     async def _parse_all_for_region(self, region: str):
         self._curr_url = self._url.format(region=region)
         last_page_num, page_size = await self._get_last_page_num_with_page_size()
         if self._limit is not None:
             last_page_num = math.ceil(self._limit / page_size)
+        self._logger.info("Parsing up to %d page", last_page_num)
         coros = [self._parse_single_page(i) for i in range(1, last_page_num + 1)]
         await asyncio.gather(*coros)
 

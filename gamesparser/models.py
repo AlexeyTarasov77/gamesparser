@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import logging
 from typing import Any
 import httpx
 from collections.abc import Sequence
@@ -40,12 +41,16 @@ class AbstractParser(ABC):
         parse_regions: Sequence[str],
         client: httpx.AsyncClient,
         limit: int | None = None,
+        logger: logging.Logger | None = None,
     ):
         self._limit = limit
         self._client = client
         if not parse_regions:
             raise ValueError("parse_regions can't be empty, specify at least 1 region")
         self._regions = set(region.lower() for region in parse_regions)
+        if logger is None:
+            logger = logging.getLogger(__name__)
+        self._logger = logger
 
     @abstractmethod
     async def parse(self) -> Sequence[ParsedItem]: ...
