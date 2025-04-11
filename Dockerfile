@@ -18,7 +18,5 @@ RUN apt update && apt install -y libpq-dev build-essential
 
 COPY . .
 
-ENTRYPOINT [ "poetry", "run" ]
-
-CMD ["sh", "-c", "python src/main.py"]
+ENTRYPOINT [ "poetry", "run", "python", "src/main.py" ]
 

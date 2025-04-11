@@ -9,6 +9,10 @@ docker/run:
 test:
 	poetry run pytest
 
+rebuild:
+	rm dist/*
+	poetry build
+
 upload:
 	twine upload dist/*
 
