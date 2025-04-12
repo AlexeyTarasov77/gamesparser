@@ -1,42 +1,51 @@
 from datetime import datetime
 from pytz import timezone
-from typing import Any, cast
+from typing import cast
 import re
 from bs4 import BeautifulSoup, Tag
 from collections.abc import Sequence
-from .models import AbstractParser, ParsedItem, ParsedPriceByRegion, Price
+from .models import AbstractParser, Price, XboxItemDetails, XboxParsedItem
 from returns.maybe import Maybe
 
 
-class _ItemParser:
+class _ItemDetailsParser:
+    def __init__(self, item_tag):
+        self._item_tag = item_tag
+
+    def _parse_description(self) -> str:
+        tag = self._item_tag.find(
+            "div", class_="Description-module__descriptionContainer___hlY8t"
+        )
+        return next(tag.children).string
+
+    def _parse_platforms(self) -> list[str]:
+        platforms_container = self._item_tag.find(
+            "ul", class_="FeaturesList-module__wrapper___KIw42"
+        )
+        return [platform.string for platform in platforms_container.children]
+
+    def parse(self) -> XboxItemDetails:
+        return XboxItemDetails(self._parse_description(), self._parse_platforms())
+
+
+class _ItemPartialParser:
     def __init__(self, item_tag, parse_regions: Sequence[str] | set[str]):
         self._item_tag = item_tag
         self._parse_regions = parse_regions
 
     def _parse_deal_until(self) -> datetime | None:
         deal_until_span = self._item_tag.find("span", string=re.compile("^Deal until:"))
-        deal_until = None
-        if deal_until_span:
-            if not any(
-                [
-                    isinstance(deal_until_span, Tag),
-                    getattr(deal_until_span, "string", None),
-                ]
-            ):
-                raise ValueError("Got invalid html tag")
-            date, time, tz_string = deal_until_span.string.split()[2:]  # type: ignore
-            date_sep = "." if "." in date else "/"
-            dt = datetime.strptime(
-                date + " " + time, f"%m{date_sep}%d{date_sep}%Y %H:%M"
-            )
-            tz = timezone(tz_string)
-            deal_until = tz.localize(dt)
+        if not deal_until_span:
+            return None
+        date, time, tz_string = deal_until_span.string.split()[2:]  # type: ignore
+        sep = "." if "." in date else "/"
+        dt = datetime.strptime(date + " " + time, f"%m{sep}%d{sep}%Y %H:%M")
+        tz = timezone(tz_string)
+        deal_until = tz.localize(dt)
         return deal_until
 
-    def _parse_price_mapping(
-        self, containers, discount: int
-    ) -> dict[str, ParsedPriceByRegion]:
-        price_mapping: dict[str, ParsedPriceByRegion] = {}
+    def _parse_price_mapping(self, containers, discount: int) -> dict[str, Price]:
+        price_mapping: dict[str, Price] = {}
         price_regex = re.compile(r"(\d+(?:\.\d+)?)\s([A-Z]{2,3})")
         for tag in containers:
             region_tag = tag.find("img", class_="flag")
@@ -56,15 +65,13 @@ class _ItemParser:
                 currency_code=currency_code,
             )
             base_price = self._calc_base_price(discounted_price, discount)
-            price_mapping[region] = ParsedPriceByRegion(base_price, discounted_price)
+            price_mapping[region] = base_price
         assert price_mapping, "Failed to parse any prices for item"
         return price_mapping
 
-    def _parse_discount(self, discount_container) -> tuple[int, bool] | None:
+    def _parse_discount(self, discount_container) -> tuple[int, bool]:
         discount_regex = re.compile(r"^(\d+)%(\s\(\w+\))?$")
         discount_tag = discount_container.find("span", string=discount_regex)
-        if discount_tag is None:
-            return None
         assert isinstance(discount_tag, Tag) and discount_tag.string is not None
         discount_match = discount_regex.search(discount_tag.string)
         assert discount_match is not None
@@ -72,18 +79,12 @@ class _ItemParser:
         discount = int(discount_match.group(1))
         return discount, with_gp
 
-    def _parse_name_and_image(self) -> tuple[str, str]:
-        maybe_tag_a: Maybe[Any] = Maybe.from_optional(
+    def _parse_tag_link(self) -> Tag:
+        maybe_tag_a: Maybe[Tag] = Maybe.from_optional(
             self._item_tag.find("div", class_="pull-left")
         ).bind_optional(lambda div: div.find("a"))
         tag_a = maybe_tag_a.unwrap()
-        assert isinstance(tag_a, Tag)
-        name = str(tag_a.get("title"))
-        photo_tag = tag_a.find("img")
-        if not photo_tag or not isinstance(photo_tag, Tag):
-            raise ValueError("Tag with photo_url not found")
-        image_url = str(photo_tag.get("src"))
-        return name, image_url
+        return tag_a
 
     def _calc_base_price(self, discounted_price: Price, discount: int) -> Price:
         base_price_value = round((discounted_price.value * 100) / (100 - discount), 2)
@@ -92,7 +93,7 @@ class _ItemParser:
         )
         return base_price
 
-    def parse(self) -> ParsedItem:
+    def parse(self) -> XboxParsedItem:
         maybe_row_tags = (
             Maybe.from_optional(
                 cast(Tag | None, self._item_tag.find("div", class_="row"))
@@ -108,15 +109,19 @@ class _ItemParser:
             res[0],
             res[1:],
         )
-        discount_info = self._parse_discount(discount_container)
-        assert discount_info is not None
-        discount, with_gp = discount_info
-        assert discount < 100
-        name, image_url = self._parse_name_and_image()
+        discount, with_gp = self._parse_discount(discount_container)
+        assert discount < 100, "Products with discount >= 100 are being skipped"
+        tag_link = self._parse_tag_link()
+        name = str(tag_link.get("title"))
+        photo_tag = tag_link.find("img")
+        assert isinstance(photo_tag, Tag)
+        image_url = str(photo_tag.get("src"))
+        item_url = str(tag_link.get("href"))
         deal_until = self._parse_deal_until()
         price_mapping = self._parse_price_mapping(price_containers, discount)
-        return ParsedItem(
+        return XboxParsedItem(
             name=name,
+            item_url=item_url,
             discount=discount,
             with_gp=with_gp,
             prices=price_mapping,
@@ -126,25 +131,42 @@ class _ItemParser:
 
 
 class XboxParser(AbstractParser):
-    _url = "https://www.xbox-now.com/en/deal-list"
+    _url_prefix = "https://www.xbox-now.com/ru"
 
-    def _parse_items(self, tags) -> Sequence[ParsedItem]:
+    def _parse_items(self, tags) -> list[XboxParsedItem]:
         skipped_count = 0
-        res = []
+        items = []
         for tag in tags:
             try:
-                parsed_item = _ItemParser(tag, self._regions).parse()
+                parsed_item = _ItemPartialParser(tag, self._regions).parse()
             except AssertionError:
                 skipped_count += 1
-            else:
-                res.append(parsed_item)
-        print("XBOX RES", "parsed", len(res), "skipped", skipped_count)
-        return res
+                continue
+            items.append(parsed_item)
+        self._logger.info(
+            "Parsed: %s items, skipped: %d (%.1f)",
+            len(items),
+            skipped_count,
+            skipped_count / len(items) * 100,
+        )
+        return items
 
-    async def parse(self) -> Sequence[ParsedItem]:
-        resp = await self._client.get(self._url)
-        soup = BeautifulSoup(resp.text, "html.parser")
-        maybe_products: Maybe[Sequence[ParsedItem]] = (
+    async def _load_page(self, path: str) -> BeautifulSoup:
+        resp = await self._client.get(self._url_prefix + path)
+        return BeautifulSoup(resp.text, "html.parser")
+
+    async def parse_item_details(self, url: str) -> XboxItemDetails:
+        soup = await self._load_page(url)
+        xbox_link_tag = soup.find("a", attrs={"rel": "nofollow noopener"})
+        assert isinstance(xbox_link_tag, Tag)
+        link = str(xbox_link_tag.get("href"))
+        soup = await self._load_page(link.replace("en-us", "ru-RU"))
+        item_container = soup.find("div", role="main", id="PageContent")
+        return _ItemDetailsParser(item_container).parse()
+
+    async def parse(self) -> list[XboxParsedItem]:
+        soup = await self._load_page("/deal-list")
+        maybe_products: Maybe[list[XboxParsedItem]] = (
             Maybe.from_optional(soup.find("div", class_="content-wrapper"))
             .bind_optional(lambda el: cast(Tag, el).find("section", class_="content"))
             .bind_optional(

@@ -1,10 +1,9 @@
 from abc import ABC, abstractmethod
 import logging
-from typing import Any
 import httpx
 from collections.abc import Sequence
 from datetime import datetime
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 
 
 @dataclass
@@ -14,25 +13,42 @@ class Price:
 
 
 @dataclass
-class ParsedPriceByRegion:
-    base_price: Price
-    discounted_price: Price
+class ParsedItem:
+    name: str
+    item_url: str
+    discount: int  # discount in percents (0-100)
+    prices: dict[str, Price]
+    image_url: str
+
+    # def as_json_serializable(self) -> dict[str, Any]:
+    #     data = asdict(self)
+    #     if self.deal_until:
+    #         data["deal_until"] = str(self.deal_until)
+    #     return data
 
 
 @dataclass
-class ParsedItem:
-    name: str
-    discount: int  # discount in percents (0-100)
-    prices: dict[str, ParsedPriceByRegion]
-    image_url: str
-    with_gp: bool | None = None
+class XboxParsedItem(ParsedItem):
+    with_gp: bool
     deal_until: datetime | None = None
 
-    def as_json_serializable(self) -> dict[str, Any]:
-        data = asdict(self)
-        if self.deal_until:
-            data["deal_until"] = str(self.deal_until)
-        return data
+
+@dataclass
+class XboxItemDetails:
+    description: str
+    platforms: list[str]
+
+
+@dataclass
+class PsnParsedItem(ParsedItem):
+    platforms: list[str]
+    with_sub: bool
+
+
+@dataclass
+class PsnItemDetails:
+    description: str
+    deal_until: datetime | None = None
 
 
 class AbstractParser(ABC):
