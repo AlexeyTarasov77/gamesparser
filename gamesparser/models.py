@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import logging
 import httpx
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from dataclasses import dataclass
 
@@ -15,7 +15,7 @@ class Price:
 @dataclass
 class ParsedItem:
     name: str
-    item_url: str
+    url: str
     discount: int  # discount in percents (0-100)
     prices: dict[str, Price]
     image_url: str
@@ -29,7 +29,7 @@ class ParsedItem:
 
 @dataclass
 class XboxParsedItem(ParsedItem):
-    with_gp: bool
+    with_sub: bool
     deal_until: datetime | None = None
 
 
@@ -54,19 +54,19 @@ class PsnItemDetails:
 class AbstractParser(ABC):
     def __init__(
         self,
-        parse_regions: Sequence[str],
         client: httpx.AsyncClient,
         limit: int | None = None,
         logger: logging.Logger | None = None,
     ):
         self._limit = limit
         self._client = client
-        if not parse_regions:
-            raise ValueError("parse_regions can't be empty, specify at least 1 region")
-        self._regions = set(region.lower() for region in parse_regions)
         if logger is None:
             logger = logging.getLogger(__name__)
         self._logger = logger
 
+    def _normalize_regions(self, regions: Iterable[str]) -> set[str]:
+        assert not isinstance(regions, str), "regions can't be string"
+        return set(region.strip().lower() for region in regions)
+
     @abstractmethod
-    async def parse(self) -> Sequence[ParsedItem]: ...
+    async def parse(self, regions: Iterable[str]) -> Sequence[ParsedItem]: ...

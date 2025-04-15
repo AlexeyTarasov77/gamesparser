@@ -1,4 +1,4 @@
-.PHONY: docker/build docker/run
+.PHONY: docker/build docker/run test rebuild upload
 
 docker/build:
 	docker build -t sales-parser .

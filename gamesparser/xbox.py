@@ -1,9 +1,10 @@
 from datetime import datetime
+import httpx
 from pytz import timezone
 from typing import cast
 import re
 from bs4 import BeautifulSoup, Tag
-from collections.abc import Sequence
+from collections.abc import Iterable
 from .models import AbstractParser, Price, XboxItemDetails, XboxParsedItem
 from returns.maybe import Maybe
 
@@ -29,9 +30,9 @@ class _ItemDetailsParser:
 
 
 class _ItemPartialParser:
-    def __init__(self, item_tag, parse_regions: Sequence[str] | set[str]):
+    def __init__(self, item_tag, regions: Iterable[str]):
         self._item_tag = item_tag
-        self._parse_regions = parse_regions
+        self._regions = regions
 
     def _parse_deal_until(self) -> datetime | None:
         deal_until_span = self._item_tag.find("span", string=re.compile("^Deal until:"))
@@ -39,7 +40,7 @@ class _ItemPartialParser:
             return None
         date, time, tz_string = deal_until_span.string.split()[2:]  # type: ignore
         sep = "." if "." in date else "/"
-        dt = datetime.strptime(date + " " + time, f"%m{sep}%d{sep}%Y %H:%M")
+        dt = datetime.strptime(date + " " + time, f"%d{sep}%m{sep}%Y %H:%M")
         tz = timezone(tz_string)
         deal_until = tz.localize(dt)
         return deal_until
@@ -51,7 +52,7 @@ class _ItemPartialParser:
             region_tag = tag.find("img", class_="flag")
             assert isinstance(region_tag, Tag)
             region = str(region_tag["title"]).lower()
-            if region not in self._parse_regions:
+            if region not in self._regions:
                 continue
             price_tag = tag.find(
                 "span", style="white-space: nowrap", string=price_regex
@@ -121,9 +122,9 @@ class _ItemPartialParser:
         price_mapping = self._parse_price_mapping(price_containers, discount)
         return XboxParsedItem(
             name=name,
-            item_url=item_url,
+            url=item_url,
             discount=discount,
-            with_gp=with_gp,
+            with_sub=with_gp,
             prices=price_mapping,
             image_url=image_url,
             deal_until=deal_until,
@@ -135,36 +136,59 @@ class XboxParser(AbstractParser):
 
     def _parse_items(self, tags) -> list[XboxParsedItem]:
         skipped_count = 0
-        items = []
+        products = []
+        i = 1
         for tag in tags:
+            i += 1
             try:
                 parsed_item = _ItemPartialParser(tag, self._regions).parse()
-            except AssertionError:
+            except AssertionError as e:
+                self._logger.info("Failed to parse product %s: %s", e, i)
                 skipped_count += 1
                 continue
-            items.append(parsed_item)
+            products.append(parsed_item)
+        if not products and not skipped_count:
+            self._logger.warning("Couldn't find any products for provided regions")
+            return []
         self._logger.info(
-            "Parsed: %s items, skipped: %d (%.1f)",
-            len(items),
+            "Parsed: %s items, skipped: %d (%.1f%%)",
+            len(products),
             skipped_count,
-            skipped_count / len(items) * 100,
+            skipped_count / (len(products) + skipped_count) * 100,
         )
-        return items
+        return products
 
-    async def _load_page(self, path: str) -> BeautifulSoup:
-        resp = await self._client.get(self._url_prefix + path)
-        return BeautifulSoup(resp.text, "html.parser")
+    async def _load_page(self, path: str, **kwargs) -> BeautifulSoup:
+        url = self._url_prefix + path if path.startswith("/") else path
+        resp = await self._client.get(url, **kwargs)
+        soup = BeautifulSoup(resp.text, "html.parser")
+        print("IS CLOSED", resp.is_closed)
+        await resp.aclose()
+        return soup
 
-    async def parse_item_details(self, url: str) -> XboxItemDetails:
+    async def parse_item_details(self, url: str) -> XboxItemDetails | None:
         soup = await self._load_page(url)
-        xbox_link_tag = soup.find("a", attrs={"rel": "nofollow noopener"})
+        xbox_link_tag = soup.find(
+            "a",
+            attrs={
+                "rel": "nofollow noopener",
+                "target": "_blank",
+                "title": re.compile(r".+"),
+            },
+        )
         assert isinstance(xbox_link_tag, Tag)
         link = str(xbox_link_tag.get("href"))
-        soup = await self._load_page(link.replace("en-us", "ru-RU"))
+        if httpx.URL(link).host not in ("xbox.com", "www.xbox.com"):
+            return None
+        soup = await self._load_page(
+            link.replace("en-us", "ru-RU"), follow_redirects=True
+        )
         item_container = soup.find("div", role="main", id="PageContent")
+        assert item_container
         return _ItemDetailsParser(item_container).parse()
 
-    async def parse(self) -> list[XboxParsedItem]:
+    async def parse(self, regions: Iterable[str]) -> list[XboxParsedItem]:
+        self._regions = super()._normalize_regions(regions)
         soup = await self._load_page("/deal-list")
         maybe_products: Maybe[list[XboxParsedItem]] = (
             Maybe.from_optional(soup.find("div", class_="content-wrapper"))

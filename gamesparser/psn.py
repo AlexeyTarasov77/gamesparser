@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from datetime import datetime
 import logging
 import re
@@ -18,7 +18,7 @@ class _ItemDetailsParser:
 
     def _parse_deal_until(self) -> datetime:
         pattern = re.compile(
-            r"(?<day>\d+)(?:\.|\/)(?<month>[1-9]|1[0-2])(?:\.|\/)(?<year>\d{4})\s(?:(?<hour>\d{2}):(?<min>\d{2}))\s(?<tz>\w+)$"
+            r"(?P<day>\d+)(?P<sep>\.|\/)(?P<month>[1-9]|1[0-2])(?:\.|\/)(?P<year>\d{4})\s(?:(?P<hour>\d{2}):(?P<min>\d{2}))\s(?P<format>AM|PM)?\s?(?P<tz>\w+)"
         )
         span_tag = self._item_tag.find("span", string=pattern)
         match = pattern.search(span_tag.string)
@@ -27,13 +27,15 @@ class _ItemDetailsParser:
         if tzname == "CEST":
             tzname = "Europe/Paris"
         tz = pytz.timezone(tzname)
-        dt = datetime(
-            int(match.group("year")),
-            int(match.group("month")),
-            int(match.group("day")),
-            int(match.group("hour")),
-            int(match.group("min")),
-        )
+        # remove timezone (last part)
+        date_string = match.group()[: match.group().rfind(" ")]
+        is_12_h = match.group("format") is not None
+        sep = match.group("sep")
+        date_format = f"%d{sep}%m{sep}%Y"
+        hour_format = "%H:%M"
+        if is_12_h:
+            hour_format = "%I:%M %p"
+        dt = datetime.strptime(date_string, date_format + " " + hour_format)
         dt = tz.localize(dt)
         if tzname == "utc":
             return dt
@@ -109,32 +111,26 @@ class PsnParser(AbstractParser):
     """Parses sales from psn official website. CAUTION: there might be products which looks absolutely the same but have different discount and prices.
     That's due to the fact that on psn price depends on product platform (ps4, ps5, etc). Such products aren't handled in parser."""
 
-    # _url = "httls://store.playstation.com/{region}/category/3f772501-f6f8-49b7-abac-874a88ca4897/"
     _url_prefix = "https://store.playstation.com/{region}"
 
     def __init__(
         self,
-        parse_regions: Sequence[str],
         client: httpx.AsyncClient,
         limit: int | None = None,
         max_concurrent_req: int = 5,
         logger: logging.Logger | None = None,
     ):
-        super().__init__(parse_regions, client, limit, logger)
-        lang_to_region_mapping = {"tr": "en", "ua": "ru"}
-        self._regions = {
-            f"{lang_to_region_mapping.get( region, "en" )}-{region}"
-            for region in parse_regions
-        }
+        super().__init__(client, limit, logger)
         self._sem = asyncio.Semaphore(max_concurrent_req)
         self._items_mapping: dict[str, PsnParsedItem] = {}
-        self._curr_region: str | None = None
+        self._curr_locale: str | None = None
         self._skipped_count = 0
+        self._cookies = None
 
     def _build_curr_url(self, page_num: int | None = None) -> str:
-        assert self._curr_region is not None
+        assert self._curr_locale is not None
         url = (
-            self._url_prefix.format(region=self._curr_region)
+            self._url_prefix.format(region=self._curr_locale)
             + "/category/3f772501-f6f8-49b7-abac-874a88ca4897/"
         )
         if page_num is not None:
@@ -142,39 +138,69 @@ class PsnParser(AbstractParser):
         return url
 
     def _build_product_url(self, product_id: str) -> str:
-        assert self._curr_region is not None
+        assert self._curr_locale is not None
         return (
-            self._url_prefix.format(region=self._curr_region) + "/product/" + product_id
+            self._url_prefix.format(region=self._curr_locale) + "/product/" + product_id
         )
 
-    async def _load_page(self, url: str) -> BeautifulSoup:
+    async def _load_page(self, url: str, **kwargs) -> BeautifulSoup:
         async with self._sem:
-            resp = await self._client.get(url, timeout=None)
+            resp = await self._client.get(
+                url,
+                timeout=None,
+                cookies=self._cookies,
+                headers={
+                    "accept": "application/json",
+                    "accept-encoding": "gzip, deflate, br, zstd",
+                    "accept-language": "ru-UA",
+                    "content-type": "application/json",
+                    # "sec-ch-ua": '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
+                    # "sec-ch-ua-mobile": "?1",
+                    # "sec-ch-ua-platform": '"Android"',
+                    # "sec-fetch-dest": "empty",
+                    # "sec-fetch-mode": "cors",
+                    # "sec-fetch-site": "same-site",
+                    "user-agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Mobile Safari/537.36",
+                },
+                **kwargs,
+            )
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 403:
+                    raise Exception(
+                        "Rate limit exceed! Please wait some time and try again later"
+                    ) from e
+                raise
+
+            if self._cookies:
+                self._cookies.update(resp.cookies)
+            else:
+                self._cookies = resp.cookies
         return BeautifulSoup(resp.text, "html.parser")
+
+    def _extract_json(self, soup: BeautifulSoup) -> dict:
+        json_data_container = soup.find("script", id="__NEXT_DATA__")
+        assert isinstance(json_data_container, Tag) and json_data_container.string
+        return json.loads(json_data_container.string)["props"]["apolloState"]
 
     async def _get_last_page_num_with_page_size(self) -> tuple[int, int]:
         soup = await self._load_page(self._build_curr_url())
-        json_data_container = soup.find("script", id="__NEXT_DATA__")
-        assert (
-            isinstance(json_data_container, Tag) and json_data_container.string
-        ), "Rate limit exceed! Please wait some time and try again later"
-        data = json.loads(json_data_container.string)["props"]["apolloState"]
+        data = self._extract_json(soup)
         page_info = None
         for key, value in data.items():
             if key.lower().startswith("categorygrid"):
                 page_info = value["pageInfo"]
-        assert page_info
+        assert page_info, "Failed to find page_info in json data"
         return math.ceil(page_info["totalCount"] / page_info["size"]), page_info["size"]
 
     async def _parse_single_page(self, page_num: int):
         self._logger.info("Parsing page %d", page_num)
         url = self._build_curr_url(page_num)
         soup = await self._load_page(url)
-        json_data_container = soup.find("script", id="__NEXT_DATA__")
-        assert isinstance(json_data_container, Tag) and json_data_container.string
-        data = json.loads(json_data_container.string)["props"]["apolloState"]
+        data = self._extract_json(soup)
         for key, value in data.items():
-            if not key.lower().startswith("product:") or value["isFree"]:
+            if not key.lower().startswith("product:") or value["price"]["isFree"]:
                 continue
             _, product_id, locale = key.split(":")
             region = locale.split("-")[1]
@@ -194,8 +220,8 @@ class PsnParser(AbstractParser):
                 self._items_mapping[product_id] = parsed_product
         self._logger.info("Page %d parsed", page_num)
 
-    async def _parse_all_for_region(self, region: str):
-        self._curr_region = region
+    async def _parse_all_for_region(self, locale: str):
+        self._curr_locale = locale
         last_page_num, page_size = await self._get_last_page_num_with_page_size()
         if self._limit is not None:
             last_page_num = math.ceil(self._limit / page_size)
@@ -206,19 +232,28 @@ class PsnParser(AbstractParser):
     async def parse_item_details(
         self, url: str | None = None, product_id: str | None = None
     ) -> PsnItemDetails:
-        assert url or product_id, "whether url or product_id must be supplied"
+        assert url or product_id, "url or product_id must be supplied"
         url = url or self._build_product_url(str(product_id))
         soup = await self._load_page(url)
         item_container = soup.find("main")
         return _ItemDetailsParser(item_container).parse()
 
-    async def parse(self) -> list[PsnParsedItem]:
-        [await self._parse_all_for_region(region) for region in self._regions]
+    async def parse(
+        self,
+        regions: Iterable[str],
+    ) -> list[PsnParsedItem]:
+        regions = super()._normalize_regions(regions)
+        lang_mapping = {"ua": "ru"}
+        locales = [f"{lang_mapping.get(region, 'en')}-{region}" for region in regions]
+        [await self._parse_all_for_region(locale) for locale in locales]
         products = list(self._items_mapping.values())
+        if not products and not self._skipped_count:
+            self._logger.warning("Couldn't find any products for provided regions")
+            return []
         self._logger.info(
-            "Parsed: %s items, skipped: %d (%.1f)",
+            "Parsed: %s items, skipped: %d (%.1f%%)",
             len(products),
             self._skipped_count,
-            self._skipped_count / len(products) * 100,
+            self._skipped_count / (len(products) + self._skipped_count) * 100,
         )
         return products[: self._limit]
