@@ -21,20 +21,22 @@ async def main():
         )
     )
     async with AsyncClient() as client:
-        psn_parser = PsnParser(["tr", "ua"], client, limit_per_platform)
-        xbox_parser = XboxParser(["us"], client, limit_per_platform)
+        psn_parser = PsnParser(client, limit_per_platform)
+        xbox_parser = XboxParser(client, limit_per_platform)
         t1 = time.perf_counter()
         psn_sales, xbox_sales = await asyncio.gather(
-            psn_parser.parse(), xbox_parser.parse()
+            psn_parser.parse(["tr", "ua"]), xbox_parser.parse(["us"])
         )
     sales = psn_sales + xbox_sales
     print(
-        "%s sales succesfully parsed, which took: %s seconds" % len(sales),
-        round(time.perf_counter() - t1, 1),
+        "%s sales succesfully parsed, which took: %s seconds"
+        % (
+            len(sales),
+            round(time.perf_counter() - t1, 1),
+        )
     )
-    for item in sales:
-        if item.name.lower().startswith("kingdom"):
-            print(item)
+    print(psn_sales[:3])
+    print(xbox_sales[:3])
 
 
 if __name__ == "__main__":

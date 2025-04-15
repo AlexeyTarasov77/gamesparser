@@ -85,25 +85,16 @@ class _ItemPartialParser:
         s: str = self._data["price"]["discountText"]  # eg.: -60%
         return abs(int(s.replace("%", "")))
 
-    def _find_cover_url(self) -> str | None:
-        for el in self._data["media"]:
-            if el["type"] == "IMAGE" and el["role"] == "MASTER":
-                return el["url"]
-        return None
-
     def parse(self, region: str, item_url: str) -> PsnParsedItem:
-        name = self._data["name"]
-        base_price = self._parse_price()
-        discount = self._parse_discount()
-        image_url = self._find_cover_url()
         return PsnParsedItem(
-            name,
-            item_url,
-            discount,
-            {region: base_price},
-            image_url or "",
-            self._data["platforms"],
-            self._data["price"]["isTiedToSubscription"],
+            id=self._data["id"],
+            name=self._data["name"],
+            url=item_url,
+            discount=self._parse_discount(),
+            prices={region: self._parse_price()},
+            media=[el["url"] for el in self._data["media"]],
+            platforms=self._data["platforms"],
+            with_sub=self._data["price"]["isTiedToSubscription"],
         )
 
 

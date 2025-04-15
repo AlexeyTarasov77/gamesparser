@@ -25,8 +25,20 @@ class _ItemDetailsParser:
         )
         return [platform.string for platform in platforms_container.children]
 
+    def _parse_gallery(self) -> list[str]:
+        gallery_container = self._item_tag.find(
+            "ol", class_="ItemsSlider-module__wrapper___nAi6y"
+        )
+        urls = []
+        for img_container in gallery_container.children:
+            img = img_container.find("img")
+            urls.append(img.src)
+        return urls
+
     def parse(self) -> XboxItemDetails:
-        return XboxItemDetails(self._parse_description(), self._parse_platforms())
+        return XboxItemDetails(
+            self._parse_description(), self._parse_platforms(), self._parse_gallery()
+        )
 
 
 class _ItemPartialParser:
@@ -118,15 +130,17 @@ class _ItemPartialParser:
         assert isinstance(photo_tag, Tag)
         image_url = str(photo_tag.get("src"))
         item_url = str(tag_link.get("href"))
+        item_id = item_url.split("/")[5]
         deal_until = self._parse_deal_until()
         price_mapping = self._parse_price_mapping(price_containers, discount)
         return XboxParsedItem(
+            id=item_id,
             name=name,
             url=item_url,
             discount=discount,
             with_sub=with_gp,
             prices=price_mapping,
-            image_url=image_url,
+            preview_img=image_url,
             deal_until=deal_until,
         )
 
