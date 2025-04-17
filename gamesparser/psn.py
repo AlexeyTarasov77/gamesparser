@@ -222,12 +222,18 @@ class PsnParser(AbstractParser):
 
     async def parse_item_details(
         self, url: str | None = None, product_id: str | None = None
-    ) -> PsnItemDetails:
+    ) -> PsnItemDetails | None:
         assert url or product_id, "url or product_id must be supplied"
         url = url or self._build_product_url(str(product_id))
-        soup = await self._load_page(url)
+        soup = await self._load_page(url, follow_redirects=True)
         item_container = soup.find("main")
-        return _ItemDetailsParser(item_container).parse()
+        try:
+            return _ItemDetailsParser(item_container).parse()
+        except AssertionError as e:
+            self._logger.warning(
+                "Failed to parse product for url: %s. Error: %s", url, e, exc_info=True
+            )
+            return None
 
     async def parse(
         self,

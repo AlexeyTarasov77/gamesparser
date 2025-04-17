@@ -24,6 +24,10 @@ async def test_psn(httpx_client: httpx.AsyncClient, allowed_regions: tuple[str, 
 async def test_psn_with_details(httpx_client: httpx.AsyncClient):
     parser = PsnParser(httpx_client, PARSE_LIMIT)
     products = await parser.parse(("ua",))
-    for product in products:
+    for i, product in enumerate(products, 1):
         await asyncio.sleep(1)  # use timeout to avoid blocking
-        await parser.parse_item_details(product.url)
+        try:
+            await parser.parse_item_details(product.url)
+        except Exception:
+            print("Parsing failed on", i)
+            raise

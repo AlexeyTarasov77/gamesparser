@@ -198,8 +198,14 @@ class XboxParser(AbstractParser):
             link.replace("en-us", "ru-RU"), follow_redirects=True
         )
         item_container = soup.find("div", role="main", id="PageContent")
-        assert item_container
-        return _ItemDetailsParser(item_container).parse()
+        try:
+            assert item_container, "Page content wasn't found"
+            return _ItemDetailsParser(item_container).parse()
+        except AssertionError as e:
+            self._logger.warning(
+                "Failed to parse product for url: %s. Error: %s", url, e, exc_info=True
+            )
+            return None
 
     async def parse(self, regions: Iterable[str]) -> list[XboxParsedItem]:
         self._regions = super()._normalize_regions(regions)
