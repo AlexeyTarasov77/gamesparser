@@ -54,14 +54,12 @@ class PsnItemDetails:
     deal_until: datetime | None = None
 
 
-class AbstractParser(ABC):
+class AbstractParser[T](ABC):
     def __init__(
         self,
         client: httpx.AsyncClient,
-        limit: int | None = None,
         logger: logging.Logger | None = None,
     ):
-        self._limit = limit
         self._client = client
         if logger is None:
             logger = logging.getLogger(__name__)
@@ -73,3 +71,5 @@ class AbstractParser(ABC):
 
     @abstractmethod
     async def parse(self, regions: Iterable[str]) -> Sequence[ParsedItem]: ...
+    @abstractmethod
+    async def parse_item_details(self, url: str) -> T | None: ...

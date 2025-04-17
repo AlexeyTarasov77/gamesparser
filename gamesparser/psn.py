@@ -98,7 +98,7 @@ class _ItemPartialParser:
         )
 
 
-class PsnParser(AbstractParser):
+class PsnParser(AbstractParser[PsnItemDetails]):
     """Parses sales from psn official website. CAUTION: there might be products which looks absolutely the same but have different discount and prices.
     That's due to the fact that on psn price depends on product platform (ps4, ps5, etc). Such products aren't handled in parser."""
 
@@ -107,11 +107,10 @@ class PsnParser(AbstractParser):
     def __init__(
         self,
         client: httpx.AsyncClient,
-        limit: int | None = None,
-        max_concurrent_req: int = 5,
         logger: logging.Logger | None = None,
+        max_concurrent_req: int = 5,
     ):
-        super().__init__(client, limit, logger)
+        super().__init__(client, logger)
         self._sem = asyncio.Semaphore(max_concurrent_req)
         self._items_mapping: dict[str, PsnParsedItem] = {}
         self._curr_locale: str | None = None
@@ -211,20 +210,16 @@ class PsnParser(AbstractParser):
                 self._items_mapping[product_id] = parsed_product
         self._logger.info("Page %d parsed", page_num)
 
-    async def _parse_all_for_region(self, locale: str):
+    async def _parse_all_for_region(self, locale: str, limit: int | None):
         self._curr_locale = locale
         last_page_num, page_size = await self._get_last_page_num_with_page_size()
-        if self._limit is not None:
-            last_page_num = math.ceil(self._limit / page_size)
+        if limit is not None:
+            last_page_num = math.ceil(limit / page_size)
         self._logger.info("Parsing up to %d page", last_page_num)
         coros = [self._parse_single_page(i) for i in range(1, last_page_num + 1)]
         await asyncio.gather(*coros)
 
-    async def parse_item_details(
-        self, url: str | None = None, product_id: str | None = None
-    ) -> PsnItemDetails | None:
-        assert url or product_id, "url or product_id must be supplied"
-        url = url or self._build_product_url(str(product_id))
+    async def parse_item_details(self, url: str) -> PsnItemDetails | None:
         soup = await self._load_page(url, follow_redirects=True)
         item_container = soup.find("main")
         try:
@@ -236,13 +231,12 @@ class PsnParser(AbstractParser):
             return None
 
     async def parse(
-        self,
-        regions: Iterable[str],
+        self, regions: Iterable[str], limit: int | None = None
     ) -> list[PsnParsedItem]:
         regions = super()._normalize_regions(regions)
         lang_mapping = {"ua": "ru"}
         locales = [f"{lang_mapping.get(region, 'en')}-{region}" for region in regions]
-        [await self._parse_all_for_region(locale) for locale in locales]
+        [await self._parse_all_for_region(locale, limit) for locale in locales]
         products = list(self._items_mapping.values())
         if not products and not self._skipped_count:
             self._logger.warning("Couldn't find any products for provided regions")
@@ -253,4 +247,4 @@ class PsnParser(AbstractParser):
             self._skipped_count,
             self._skipped_count / (len(products) + self._skipped_count) * 100,
         )
-        return products[: self._limit]
+        return products[:limit]

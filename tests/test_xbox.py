@@ -12,14 +12,15 @@ from tests.conftest import PARSE_LIMIT, check_parsed_unique_with_regions
 )
 @pytest.mark.asyncio
 async def test_xbox(httpx_client: httpx.AsyncClient, allowed_regions: tuple[str, ...]):
-    parser = XboxParser(httpx_client, PARSE_LIMIT)
-    await check_parsed_unique_with_regions(parser, allowed_regions)
+    parser = XboxParser(httpx_client)
+    products = await parser.parse(allowed_regions, PARSE_LIMIT)
+    await check_parsed_unique_with_regions(allowed_regions, products)
 
 
 @pytest.mark.asyncio
 async def test_xbox_with_details(httpx_client: httpx.AsyncClient):
-    parser = XboxParser(httpx_client, PARSE_LIMIT)
-    products = await parser.parse(("us", "eg"))
+    parser = XboxParser(httpx_client)
+    products = await parser.parse(("us", "eg"), PARSE_LIMIT)
     coros = [parser.parse_item_details(product.url) for product in products]
     res = await asyncio.gather(*coros)
     print(

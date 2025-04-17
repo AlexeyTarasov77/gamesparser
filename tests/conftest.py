@@ -1,11 +1,11 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 import os
 from typing import Final
 
 import httpx
 import pytest_asyncio
 
-from gamesparser.models import AbstractParser
+from gamesparser.models import ParsedItem
 
 
 _limit = os.getenv("TESTS_PARSE_LIMIT")
@@ -21,15 +21,12 @@ async def httpx_client():
 
 
 async def check_parsed_unique_with_regions(
-    parser: AbstractParser,
-    allowed_regions: Iterable[str],
+    allowed_regions: Iterable[str], parsed: Sequence[ParsedItem]
 ):
     allowed_regions = set(region.lower() for region in allowed_regions)
-    parsed_products = await parser.parse(allowed_regions)
     checked_names: list[str] = []
-    for obj in parsed_products:
+    for obj in parsed:
         assert obj not in checked_names
         for region in obj.prices:
             assert region.lower() in allowed_regions
         checked_names.append(obj.name)
-    return parsed_products

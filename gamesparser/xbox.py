@@ -145,7 +145,7 @@ class _ItemPartialParser:
         )
 
 
-class XboxParser(AbstractParser):
+class XboxParser(AbstractParser[XboxItemDetails]):
     _url_prefix = "https://www.xbox-now.com/ru"
 
     def _parse_items(self, tags) -> list[XboxParsedItem]:
@@ -207,7 +207,9 @@ class XboxParser(AbstractParser):
             )
             return None
 
-    async def parse(self, regions: Iterable[str]) -> list[XboxParsedItem]:
+    async def parse(
+        self, regions: Iterable[str], limit: int | None = None
+    ) -> list[XboxParsedItem]:
         self._regions = super()._normalize_regions(regions)
         soup = await self._load_page("/deal-list")
         maybe_products: Maybe[list[XboxParsedItem]] = (
@@ -215,7 +217,7 @@ class XboxParser(AbstractParser):
             .bind_optional(lambda el: cast(Tag, el).find("section", class_="content"))
             .bind_optional(
                 lambda content: cast(Tag, content).find_all(
-                    "div", class_="box-body comparison-table-entry", limit=self._limit
+                    "div", class_="box-body comparison-table-entry", limit=limit
                 )
             )
             .bind_optional(lambda products: self._parse_items(products))
