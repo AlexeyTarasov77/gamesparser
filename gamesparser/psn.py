@@ -3,6 +3,7 @@ from collections.abc import Iterable, Mapping
 from datetime import datetime
 import logging
 import re
+import random
 import math
 import json
 
@@ -85,14 +86,32 @@ class _ItemPartialParser:
         s: str = self._data["price"]["discountText"]  # eg.: -60%
         return abs(int(s.replace("%", "")))
 
+    def _parse_preview_and_media(self) -> tuple[str, list[str]]:
+        preview: str | None = None
+        other_media: list[dict] = []
+        for el in self._data["media"]:
+            if el["role"] == "MASTER":
+                preview = el["url"]
+            else:
+                other_media.append(el)
+        if preview is None:
+            preview = str(
+                random.choice(
+                    [el["url"] for el in other_media if el["type"] == "IMAGE"]
+                )
+            )
+        return preview, [el["url"] for el in other_media]
+
     def parse(self, region: str, item_url: str) -> PsnParsedItem:
+        preview_img_url, media = self._parse_preview_and_media()
         return PsnParsedItem(
             id=self._data["id"],
             name=self._data["name"],
             url=item_url,
             discount=self._parse_discount(),
             prices={region: self._parse_price()},
-            media=[el["url"] for el in self._data["media"]],
+            preview_img_url=preview_img_url,
+            media=media,
             platforms=self._data["platforms"],
             with_sub=self._data["price"]["isTiedToSubscription"],
         )

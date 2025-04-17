@@ -140,7 +140,7 @@ class _ItemPartialParser:
             discount=discount,
             with_sub=with_gp,
             prices=price_mapping,
-            preview_img=image_url,
+            preview_img_url=image_url,
             deal_until=deal_until,
         )
 

@@ -17,20 +17,14 @@ class ParsedItem:
     id: str
     name: str
     url: str
+    preview_img_url: str
     discount: int  # discount in percents (0-100)
     prices: dict[str, Price]
-
-    # def as_json_serializable(self) -> dict[str, Any]:
-    #     data = asdict(self)
-    #     if self.deal_until:
-    #         data["deal_until"] = str(self.deal_until)
-    #     return data
 
 
 @dataclass
 class XboxParsedItem(ParsedItem):
     with_sub: bool
-    preview_img: str
     deal_until: datetime | None = None
 
 
