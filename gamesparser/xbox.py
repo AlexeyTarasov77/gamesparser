@@ -1,5 +1,4 @@
 from datetime import datetime
-import httpx
 from pytz import timezone
 from typing import cast
 import re
@@ -23,17 +22,25 @@ class _ItemDetailsParser:
         platforms_container = self._item_tag.find(
             "ul", class_="FeaturesList-module__wrapper___KIw42"
         )
-        return [platform.string for platform in platforms_container.children]
+        return [platform.text for platform in platforms_container.children]
 
     def _parse_gallery(self) -> list[str]:
-        gallery_container = self._item_tag.find(
-            "ol", class_="ItemsSlider-module__wrapper___nAi6y"
-        )
-        urls = []
-        for img_container in gallery_container.children:
-            img = img_container.find("img")
-            urls.append(img.src)
-        return urls
+        # TODO: Use selenium to parse gallery, because gallery is loaded by js script
+        return []
+        # gallery_list = self._item_tag.find(
+        #     "ol", {"role": "none"}, class_="ItemsSlider-module__wrapper___nAi6y"
+        # )
+        # if gallery_list is None:
+        #     print("GALLERY NOT FOUND")
+        #     return []
+        # urls = []
+        # for li in gallery_list.children:
+        #     # print("LIST ITEM", li.get("role"), li)
+        #     if li.get("role") != "none":
+        #         continue
+        #     img = li.find("img")
+        #     urls.append(img.get("src"))
+        # return urls
 
     def parse(self) -> XboxItemDetails:
         return XboxItemDetails(
@@ -176,8 +183,6 @@ class XboxParser(AbstractParser[XboxItemDetails]):
         url = self._url_prefix + path if path.startswith("/") else path
         resp = await self._client.get(url, **kwargs)
         soup = BeautifulSoup(resp.text, "html.parser")
-        print("IS CLOSED", resp.is_closed)
-        await resp.aclose()
         return soup
 
     async def parse_item_details(self, url: str) -> XboxItemDetails | None:
@@ -191,11 +196,10 @@ class XboxParser(AbstractParser[XboxItemDetails]):
             },
         )
         assert isinstance(xbox_link_tag, Tag)
-        link = str(xbox_link_tag.get("href"))
-        if httpx.URL(link).host not in ("xbox.com", "www.xbox.com"):
-            return None
+        self._logger.info("Parsing details for item: %s", xbox_link_tag.get("title"))
+        next_url = str(xbox_link_tag.get("href"))
         soup = await self._load_page(
-            link.replace("en-us", "ru-RU"), follow_redirects=True
+            next_url.replace("en-us", "ru-RU"), follow_redirects=True
         )
         item_container = soup.find("div", role="main", id="PageContent")
         try:

@@ -22,11 +22,9 @@ async def test_xbox_with_details(httpx_client: httpx.AsyncClient):
     parser = XboxParser(httpx_client)
     products = await parser.parse(("us", "eg"), PARSE_LIMIT)
     coros = [parser.parse_item_details(product.url) for product in products]
-    res = await asyncio.gather(*coros)
-    print(
-        "Succefully parsed %s out of %s"
-        % (
-            len([el for el in res if el is not None]),
-            len(res),
-        )
-    )
+    details = await asyncio.gather(*coros)
+    # check that details of at least half of products were succesfully parsed
+    assert len([obj for obj in details if obj is not None]) > len(products) * 0.5
+    for obj in details:
+        if obj is not None:
+            print("MEDIA", obj.media)

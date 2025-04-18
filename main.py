@@ -29,7 +29,9 @@ async def main():
             xbox_parser.parse(["us"], limit_per_platform),
         )
         psn_details = await psn_parser.parse_item_details(psn_sales[0].url)
-        print("PSN DETAILS", psn_details)
+        print("PSN DETAILS SAMPLE", psn_details)
+        xbox_details = await xbox_parser.parse_item_details(xbox_sales[0].url)
+        print("XBOX DETAILS SAMPLE", xbox_details)
     sales = psn_sales + xbox_sales
     print(
         "%s sales succesfully parsed, which took: %s seconds"
