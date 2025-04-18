@@ -59,9 +59,14 @@ class AbstractParser[T](ABC):
             logger = logging.getLogger(__name__)
         self._logger = logger
 
-    def _normalize_regions(self, regions: Iterable[str]) -> set[str]:
+    def _normalize_regions(self, regions: Iterable[str]) -> list[str]:
         assert not isinstance(regions, str), "regions can't be string"
-        return set(region.strip().lower() for region in regions)
+        normalized = []
+        for region in regions:
+            reg = region.strip().lower()
+            if reg not in normalized:
+                normalized.append(reg)
+        return normalized
 
     @abstractmethod
     async def parse(self, regions: Iterable[str]) -> Sequence[ParsedItem]: ...

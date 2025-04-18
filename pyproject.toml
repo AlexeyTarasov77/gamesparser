@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gamesparser"
-version = "0.2.0"
+version = "0.2.2"
 description = ""
 authors = ["AlexeyTarasov77 <alexxey2707@gmail.com>"]
 license = "MIT"
