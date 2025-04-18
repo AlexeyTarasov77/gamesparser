@@ -47,7 +47,7 @@ class _ItemDetailsParser:
             "p", attrs={"data-qa": "mfe-game-overview#description"}
         )
         assert p_tag is not None
-        return p_tag.string
+        return p_tag.decode_contents()
 
     def parse(self) -> PsnItemDetails:
         return PsnItemDetails(self._parse_description(), self._parse_deal_until())
