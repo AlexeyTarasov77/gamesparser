@@ -1,4 +1,5 @@
 from datetime import datetime
+import httpx
 from pytz import timezone
 from typing import cast
 import re
@@ -182,11 +183,23 @@ class XboxParser(AbstractParser[XboxItemDetails]):
     async def _load_page(self, path: str, **kwargs) -> BeautifulSoup:
         url = self._url_prefix + path if path.startswith("/") else path
         resp = await self._client.get(url, **kwargs)
+        resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
         return soup
 
     async def parse_item_details(self, url: str) -> XboxItemDetails | None:
-        soup = await self._load_page(url)
+        try:
+            soup = await self._load_page(url)
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                self._logger.warning("Details page for url: %s not found", url)
+                return None
+            self._logger.warning(
+                "Failed to parse product details due to request failure. Url: %s, status: %d",
+                url,
+                e.response.status_code,
+            )
+            raise
         xbox_link_tag = soup.find(
             "a",
             attrs={
