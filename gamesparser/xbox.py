@@ -60,7 +60,10 @@ class _ItemPartialParser:
             return None
         date, time, tz_string = deal_until_span.string.split()[2:]  # type: ignore
         sep = "." if "." in date else "/"
-        dt = datetime.strptime(date + " " + time, f"%d{sep}%m{sep}%Y %H:%M")
+        try:
+            dt = datetime.strptime(date + " " + time, f"%d{sep}%m{sep}%Y %H:%M")
+        except ValueError:
+            dt = datetime.strptime(date + " " + time, f"%m{sep}%d{sep}%Y %H:%M")
         tz = timezone(tz_string)
         deal_until = tz.localize(dt)
         return deal_until
