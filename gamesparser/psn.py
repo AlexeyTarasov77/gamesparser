@@ -163,29 +163,23 @@ class PsnParser(AbstractParser[PsnItemDetails]):
                     "accept-encoding": "gzip, deflate, br, zstd",
                     "accept-language": "ru-UA",
                     "content-type": "application/json",
-                    # "sec-ch-ua": '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
-                    # "sec-ch-ua-mobile": "?1",
-                    # "sec-ch-ua-platform": '"Android"',
-                    # "sec-fetch-dest": "empty",
-                    # "sec-fetch-mode": "cors",
-                    # "sec-fetch-site": "same-site",
                     "user-agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Mobile Safari/537.36",
                 },
                 **kwargs,
             )
-            try:
-                resp.raise_for_status()
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 403:
-                    raise Exception(
-                        "Rate limit exceed! Please wait some time and try again later"
-                    ) from e
-                raise
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 403:
+                raise Exception(
+                    "Rate limit exceed! Please wait some time and try again later"
+                ) from e
+            raise
 
-            if self._cookies:
-                self._cookies.update(resp.cookies)
-            else:
-                self._cookies = resp.cookies
+        if self._cookies:
+            self._cookies.update(resp.cookies)
+        else:
+            self._cookies = resp.cookies
         return BeautifulSoup(resp.text, "html.parser")
 
     def _extract_json(self, soup: BeautifulSoup) -> dict:

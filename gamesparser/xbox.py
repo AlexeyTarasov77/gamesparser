@@ -154,7 +154,7 @@ class _ItemPartialParser:
 
 
 class XboxParser(AbstractParser[XboxItemDetails]):
-    _url_prefix = "https://www.xbox-now.com/ru"
+    _url_prefix = "https://www.xbox-now.com/en"
 
     def _parse_items(self, tags) -> list[XboxParsedItem]:
         skipped_count = 0
