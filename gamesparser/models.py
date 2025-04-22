@@ -56,7 +56,7 @@ class AbstractParser[T](ABC):
     ):
         self._client = client
         if logger is None:
-            logger = logging.getLogger(__name__)
+            logger = logging.getLogger("GAMESPARSER")
         self._logger = logger
 
     def _normalize_regions(self, regions: Iterable[str]) -> list[str]:

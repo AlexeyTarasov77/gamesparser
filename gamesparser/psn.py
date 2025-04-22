@@ -198,10 +198,11 @@ class PsnParser(AbstractParser[PsnItemDetails]):
         return math.ceil(page_info["totalCount"] / page_info["size"]), page_info["size"]
 
     async def _parse_single_page(self, page_num: int):
-        self._logger.info("Parsing page %d", page_num)
         url = self._build_curr_url(page_num)
         soup = await self._load_page(url)
+        self._logger.info("Page %d loaded", page_num)
         data = self._extract_json(soup)
+        soup.decompose()
         for key, value in data.items():
             if not key.lower().startswith("product:") or value["price"]["isFree"]:
                 continue
@@ -221,7 +222,7 @@ class PsnParser(AbstractParser[PsnItemDetails]):
                 self._items_mapping[product_id].prices.update(parsed_product.prices)
             else:
                 self._items_mapping[product_id] = parsed_product
-        self._logger.info("Page %d parsed", page_num)
+        self._logger.info("Page %d succesfully parsed", page_num)
 
     async def _parse_all_for_region(self, locale: str, limit: int | None):
         self._curr_locale = locale
