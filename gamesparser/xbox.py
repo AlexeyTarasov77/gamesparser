@@ -191,18 +191,7 @@ class XboxParser(AbstractParser[XboxItemDetails]):
         return soup
 
     async def parse_item_details(self, url: str) -> XboxItemDetails | None:
-        try:
-            soup = await self._load_page(url)
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
-                self._logger.warning("Details page for url: %s not found", url)
-                return None
-            self._logger.warning(
-                "Failed to parse product details due to request failure. Url: %s, status: %d",
-                url,
-                e.response.status_code,
-            )
-            raise
+        soup = await self._load_page(url)
         xbox_link_tag = soup.find(
             "a",
             attrs={
@@ -214,9 +203,20 @@ class XboxParser(AbstractParser[XboxItemDetails]):
         assert isinstance(xbox_link_tag, Tag)
         self._logger.info("Parsing details for item: %s", xbox_link_tag.get("title"))
         next_url = str(xbox_link_tag.get("href"))
-        soup = await self._load_page(
-            next_url.replace("en-us", "ru-RU"), follow_redirects=True
-        )
+        try:
+            soup = await self._load_page(
+                next_url.replace("en-us", "ru-RU"), follow_redirects=True
+            )
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                self._logger.warning("Details page for url: %s not found", url)
+                return None
+            self._logger.warning(
+                "Failed to parse product details due to request failure. Url: %s, status: %d",
+                url,
+                e.response.status_code,
+            )
+            raise
         item_container = soup.find("div", role="main", id="PageContent")
         try:
             assert item_container, "Page content wasn't found"
