@@ -1,5 +1,9 @@
 .PHONY: docker/build docker/run test rebuild upload
 
+all:
+	@$(MAKE) rebuild
+	@$(MAKE) upload
+
 docker/build:
 	docker build -t sales-parser .
 
