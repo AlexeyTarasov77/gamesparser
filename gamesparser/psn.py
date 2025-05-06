@@ -58,7 +58,7 @@ class _ItemPartialParser:
         self._data = data
 
     def _parse_price(self) -> Price:
-        s = self._data["price"]["basePrice"]
+        s = self._data["price"]["discountedPrice"]
         price_regex = re.compile(
             r"(?:(?P<price>\d[\d\s.,]*)\s*([A-Z]{2,3})|([A-Z]{2,3})\s*(\d[\d\s.,]*))"
         )
@@ -80,7 +80,7 @@ class _ItemPartialParser:
         curr = currency_code.strip()
         if curr == "TL":
             curr = "TRY"  # change abbreviated to official currency code for turkish
-        return Price(value=float(normalized_value), currency_code=curr)
+        return Price(discounted_value=float(normalized_value), currency_code=curr)
 
     def _parse_discount(self) -> int:
         s: str = self._data["price"]["discountText"]  # eg.: -60%

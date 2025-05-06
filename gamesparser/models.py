@@ -9,7 +9,7 @@ from dataclasses import dataclass
 @dataclass
 class Price:
     currency_code: str
-    value: float
+    discounted_value: float
 
 
 @dataclass

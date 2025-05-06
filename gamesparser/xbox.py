@@ -66,7 +66,7 @@ class _ItemPartialParser:
         deal_until = tz.localize(dt)
         return deal_until
 
-    def _parse_price_mapping(self, containers, discount: int) -> dict[str, Price]:
+    def _parse_price_mapping(self, containers) -> dict[str, Price]:
         price_mapping: dict[str, Price] = {}
         price_regex = re.compile(r"(\d+(?:\.\d+)?)\s([A-Z]{2,3})")
         for tag in containers:
@@ -83,11 +83,10 @@ class _ItemPartialParser:
             assert price_match is not None
             currency_code = price_match.group(2).strip()
             discounted_price = Price(
-                value=float(price_match.group(1)),
+                discounted_value=float(price_match.group(1)),
                 currency_code=currency_code,
             )
-            base_price = self._calc_base_price(discounted_price, discount)
-            price_mapping[region] = base_price
+            price_mapping[region] = discounted_price
         assert price_mapping, "Failed to parse any prices for item"
         return price_mapping
 
@@ -107,13 +106,6 @@ class _ItemPartialParser:
         ).bind_optional(lambda div: div.find("a"))
         tag_a = maybe_tag_a.unwrap()
         return tag_a
-
-    def _calc_base_price(self, discounted_price: Price, discount: int) -> Price:
-        base_price_value = round((discounted_price.value * 100) / (100 - discount), 2)
-        base_price = Price(
-            value=base_price_value, currency_code=discounted_price.currency_code
-        )
-        return base_price
 
     def parse(self) -> XboxParsedItem:
         maybe_row_tags = (
@@ -141,7 +133,7 @@ class _ItemPartialParser:
         item_url = str(tag_link.get("href"))
         item_id = item_url.split("/")[5]
         deal_until = self._parse_deal_until()
-        price_mapping = self._parse_price_mapping(price_containers, discount)
+        price_mapping = self._parse_price_mapping(price_containers)
         return XboxParsedItem(
             id=item_id,
             name=name,
