@@ -87,6 +87,7 @@ class _ItemPartialParser:
 
     def _parse_discount(self) -> int:
         s: str = self._data["price"]["discountText"]  # eg.: -60%
+        assert s is not None
         return abs(int(s.replace("%", "")))
 
     def _parse_preview_and_media(self) -> tuple[str, list[str]]:
