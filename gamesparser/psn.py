@@ -17,11 +17,14 @@ class _ItemDetailsParser:
     def __init__(self, item_tag):
         self._item_tag = item_tag
 
-    def _parse_deal_until(self) -> datetime:
+    def _parse_deal_until(self) -> datetime | None:
         pattern = re.compile(
             r"(?P<day>\d+)(?P<sep>\.|\/)(?P<month>[1-9]|1[0-2])(?:\.|\/)(?P<year>\d{4})\s(?:(?P<hour>\d{2}):(?P<min>\d{2}))\s(?P<format>AM|PM)?\s?(?P<tz>\w+)"
         )
         span_tag = self._item_tag.find("span", string=pattern)
+        if span_tag is None:
+            # product is not on discount anymore
+            return None
         match = pattern.search(span_tag.string)
         assert match is not None
         tzname = match.group("tz").lower()
@@ -237,7 +240,12 @@ class PsnParser(AbstractParser[PsnItemDetails]):
         soup = await self._load_page(url, follow_redirects=True)
         item_container = soup.find("main")
         try:
-            return _ItemDetailsParser(item_container).parse()
+            parsed = _ItemDetailsParser(item_container).parse()
+            if parsed.deal_until is None:
+                self._logger.warning(
+                    "Product under url: %s is not discounted anymore", url
+                )
+            return parsed
         except AssertionError as e:
             self._logger.warning(
                 "Failed to parse product for url: %s. Error: %s", url, e, exc_info=True
