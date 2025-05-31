@@ -1,4 +1,5 @@
 from datetime import datetime
+from urllib.parse import urljoin, urlparse
 import httpx
 from pytz import timezone
 from typing import cast
@@ -130,6 +131,8 @@ class _ItemPartialParser:
         photo_tag = tag_link.find("img")
         assert isinstance(photo_tag, Tag)
         image_url = str(photo_tag.get("src"))
+        # normalize image url by removing query params specifier width, height, etc..
+        image_url = urljoin(image_url, urlparse(image_url).path)
         item_url = str(tag_link.get("href"))
         item_id = item_url.split("/")[5]
         deal_until = self._parse_deal_until()

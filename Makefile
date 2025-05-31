@@ -11,7 +11,7 @@ docker/run:
 	docker run --rm --name sales-parser-cnt sales-parser
 
 test:
-	poetry run pytest
+	TESTS_PARSE_LIMIT=10 poetry run pytest -s
 
 rebuild:
 	rm dist/*
