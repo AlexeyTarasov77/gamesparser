@@ -112,6 +112,10 @@ class _ItemPartialParser:
         tag_a = maybe_tag_a.unwrap()
         return tag_a
 
+    def get_item_name(self) -> str:
+        tag_link = self._parse_tag_link()
+        return str(tag_link.get("title"))
+
     def parse(self) -> XboxParsedItem:
         maybe_row_tags = (
             Maybe.from_optional(
@@ -162,10 +166,14 @@ class XboxParser(AbstractParser[XboxItemDetails]):
         i = 1
         for tag in tags:
             i += 1
+            parser = _ItemPartialParser(tag, self._regions)
             try:
-                parsed_item = _ItemPartialParser(tag, self._regions).parse()
+                parsed_item = parser.parse()
             except AssertionError as e:
-                self._logger.info("error during parsing product %s. i: %s", e, i)
+                name = parser.get_item_name()
+                self._logger.info(
+                    "error during parsing product: %s. i: %s, name: %s", e, i, name
+                )
                 skipped_count += 1
                 continue
             products.append(parsed_item)
