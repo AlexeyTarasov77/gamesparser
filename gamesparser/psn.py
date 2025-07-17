@@ -26,7 +26,7 @@ class _ItemDetailsParser:
             # product is not on discount anymore
             return None
         match = pattern.search(span_tag.string)
-        assert match is not None
+        assert match is not None, "unable to extract deal until from tag: %s" % span_tag
         tzname = match.group("tz").lower()
         if tzname == "CEST":
             tzname = "Europe/Paris"
@@ -49,7 +49,7 @@ class _ItemDetailsParser:
         p_tag = self._item_tag.find(
             "p", attrs={"data-qa": "mfe-game-overview#description"}
         )
-        assert p_tag is not None
+        assert p_tag is not None, "description tag is not found"
         return p_tag.decode_contents()
 
     def parse(self) -> PsnItemDetails:
@@ -66,14 +66,17 @@ class _ItemPartialParser:
             r"(?:(?P<price>\d[\d\s.,]*)\s*([A-Z]{2,3})|([A-Z]{2,3})\s*(\d[\d\s.,]*))"
         )
         price_match = price_regex.search(s)
-        assert price_match is not None
+        assert price_match is not None, "unable to extract price from: %s" % s
         # may be 2 different variations of price form on page
         value, currency_code = None, None
         if price_match.group(1) is not None:
             value, currency_code = price_match.group(1, 2)
         elif price_match.group(3) is not None:
             value, currency_code = price_match.group(4, 3)
-        assert value is not None and currency_code is not None, "Unable to parse price"
+        assert value is not None and currency_code is not None, (
+            "unable to parse price with currency. value: %s, currency_code: %s"
+            % (value, currency_code)
+        )
         normalized_value = (
             value.replace(".", "")
             .replace(",", ".")
@@ -141,7 +144,7 @@ class PsnParser(AbstractParser[PsnItemDetails]):
         self._cookies = None
 
     def _build_curr_url(self, page_num: int | None = None) -> str:
-        assert self._curr_locale is not None
+        assert self._curr_locale is not None, "locale is not set"
         url = (
             self._url_prefix.format(region=self._curr_locale)
             + "/category/3f772501-f6f8-49b7-abac-874a88ca4897/"
@@ -151,7 +154,7 @@ class PsnParser(AbstractParser[PsnItemDetails]):
         return url
 
     def _build_product_url(self, product_id: str) -> str:
-        assert self._curr_locale is not None
+        assert self._curr_locale is not None, "locale is not set"
         return (
             self._url_prefix.format(region=self._curr_locale) + "/product/" + product_id
         )
@@ -188,7 +191,9 @@ class PsnParser(AbstractParser[PsnItemDetails]):
 
     def _extract_json(self, soup: BeautifulSoup) -> dict:
         json_data_container = soup.find("script", id="__NEXT_DATA__")
-        assert isinstance(json_data_container, Tag) and json_data_container.string
+        assert isinstance(json_data_container, Tag) and json_data_container.string, (
+            "json data not found"
+        )
         return json.loads(json_data_container.string)["props"]["apolloState"]
 
     async def _get_last_page_num_with_page_size(self) -> tuple[int, int]:

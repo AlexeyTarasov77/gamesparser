@@ -72,16 +72,18 @@ class _ItemPartialParser:
         price_regex = re.compile(r"(\d+(?:\.\d+)?)\s([A-Z]{2,3})")
         for tag in containers:
             region_tag = tag.find("img", class_="flag")
-            assert isinstance(region_tag, Tag)
+            assert isinstance(region_tag, Tag), "Region flag img must be a valid tag"
             region = str(region_tag["title"]).lower()
             if region not in self._regions:
                 continue
             price_tag = tag.find(
                 "span", style="white-space: nowrap", string=price_regex
             )
-            assert isinstance(price_tag, Tag) and price_tag.string is not None
+            assert isinstance(price_tag, Tag) and price_tag.string is not None, (
+                "Price must be a valid non-empty tag. Actual: %s" % price_tag
+            )
             price_match = price_regex.search(price_tag.string)
-            assert price_match is not None
+            assert price_match is not None, "Unable to extract price value from tag"
             currency_code = price_match.group(2).strip()
             discounted_price = Price(
                 discounted_value=float(price_match.group(1)),
@@ -92,11 +94,13 @@ class _ItemPartialParser:
         return price_mapping
 
     def _parse_discount(self, discount_container) -> tuple[int, bool]:
-        discount_regex = re.compile(r"^(\d+)%(\s\(\w+\))?$")
+        discount_regex = re.compile(r"^(\d+)%\s?(\(\w+\))?")
         discount_tag = discount_container.find("span", string=discount_regex)
-        assert isinstance(discount_tag, Tag) and discount_tag.string is not None
+        assert isinstance(discount_tag, Tag) and discount_tag.string is not None, (
+            "Discount must be a valid non-empty tag. Actual: %s" % discount_tag
+        )
         discount_match = discount_regex.search(discount_tag.string)
-        assert discount_match is not None
+        assert discount_match is not None, "Unable to extract discount value from tag"
         with_gp = discount_match.group(2) is not None
         discount = int(discount_match.group(1))
         return discount, with_gp
@@ -129,7 +133,7 @@ class _ItemPartialParser:
         tag_link = self._parse_tag_link()
         name = str(tag_link.get("title"))
         photo_tag = tag_link.find("img")
-        assert isinstance(photo_tag, Tag)
+        assert isinstance(photo_tag, Tag), "Img must be a valid tag"
         image_url = str(photo_tag.get("src"))
         # normalize image url by removing query params specifier width, height, etc..
         image_url = urljoin(image_url, urlparse(image_url).path)
@@ -161,7 +165,7 @@ class XboxParser(AbstractParser[XboxItemDetails]):
             try:
                 parsed_item = _ItemPartialParser(tag, self._regions).parse()
             except AssertionError as e:
-                self._logger.info("Failed to parse product %s: %s", e, i)
+                self._logger.info("error during parsing product %s. i: %s", e, i)
                 skipped_count += 1
                 continue
             products.append(parsed_item)
