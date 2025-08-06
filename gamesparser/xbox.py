@@ -94,15 +94,20 @@ class _ItemPartialParser:
         return price_mapping
 
     def _parse_discount(self, discount_container) -> tuple[int, bool]:
-        discount_regex = re.compile(r"^(\d+)%\s?(\(\w+\))?")
-        discount_tag = discount_container.find("span", string=discount_regex)
+        simple_discount_regex = re.compile(r"^(\d+)%\s?(\(\w+\))?")  #  50% or 50% (GP)
+        composite_discount_regex = re.compile(r"(\d+)%\s\/\s(\d+)%")  # 10% / 60%
+        discount_tag = discount_container.find("span", string=simple_discount_regex)
         assert isinstance(discount_tag, Tag) and discount_tag.string is not None, (
             "Discount must be a valid non-empty tag. Actual: %s" % discount_tag
         )
-        discount_match = discount_regex.search(discount_tag.string)
-        assert discount_match is not None, "Unable to extract discount value from tag"
-        with_gp = discount_match.group(2) is not None
-        discount = int(discount_match.group(1))
+        with_gp = False
+        if match := composite_discount_regex.search(discount_tag.string):
+            discount = int(match.group(2))
+        elif match := simple_discount_regex.search(discount_tag.string):
+            with_gp = match.group(2) is not None
+            discount = int(match.group(1))
+        else:
+            raise AssertionError("Unable to extract discount value from tag")
         return discount, with_gp
 
     def _parse_tag_link(self) -> Tag:
